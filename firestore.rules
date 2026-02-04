@@ -1,0 +1,117 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection - users can read any user, but only update their own
+    // Firebase UID = Spotify user ID (set by custom token)
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      
+      // Buddies subcollection
+      // - Anyone authenticated can read buddies
+      // - Owner can write their own buddies
+      // - Another user can add themselves as a buddy (when accepting a request)
+      match /buddies/{buddyId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && 
+                       (request.auth.uid == userId || request.auth.uid == buddyId);
+      }
+    }
+    
+    // Ratings collection - users can read all ratings, but only create/update/delete their own
+    // Firebase UID = Spotify user ID, which matches the userId field in ratings
+    match /ratings/{ratingId} {
+      allow read: if true;
+      allow create: if request.auth != null && 
+                      request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null && 
+                               resource.data.userId == request.auth.uid;
+      
+      // Likes subcollection - anyone can read, users can like/unlike
+      match /likes/{likeId} {
+        allow read: if true;
+        allow create: if request.auth != null && 
+                        request.resource.data.userId == request.auth.uid;
+        allow delete: if request.auth != null && 
+                        resource.data.userId == request.auth.uid;
+      }
+      
+      // Comments subcollection - anyone can read, users can comment and delete their own
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if request.auth != null && 
+                        request.resource.data.userId == request.auth.uid;
+        allow update, delete: if request.auth != null && 
+                                 resource.data.userId == request.auth.uid;
+        
+        // Comment Likes subcollection - anyone can read, users can like/unlike
+        match /likes/{likeId} {
+          allow read: if true;
+          allow create: if request.auth != null && 
+                          request.resource.data.userId == request.auth.uid;
+          allow delete: if request.auth != null && 
+                          resource.data.userId == request.auth.uid;
+        }
+      }
+    }
+    
+    // Reviews collection - anyone can read reviews, but only owner can write their own
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if request.auth != null && 
+                      request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null && 
+                               resource.data.userId == request.auth.uid;
+      
+      // Likes subcollection - anyone can read, users can like/unlike
+      match /likes/{likeId} {
+        allow read: if true;
+        allow create: if request.auth != null && 
+                        request.resource.data.userId == request.auth.uid;
+        allow delete: if request.auth != null && 
+                        resource.data.userId == request.auth.uid;
+      }
+      
+      // Comments subcollection - anyone can read, users can comment and delete their own
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if request.auth != null && 
+                        request.resource.data.userId == request.auth.uid;
+        allow update, delete: if request.auth != null && 
+                                 resource.data.userId == request.auth.uid;
+        
+        // Comment Likes subcollection - anyone can read, users can like/unlike
+        match /likes/{likeId} {
+          allow read: if true;
+          allow create: if request.auth != null && 
+                          request.resource.data.userId == request.auth.uid;
+          allow delete: if request.auth != null && 
+                          resource.data.userId == request.auth.uid;
+        }
+      }
+    }
+    
+    // User Top Items collection - any authenticated user can read, but only write their own
+    match /userTopItems/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Buddy Requests collection
+    match /buddyRequests/{requestId} {
+      // Anyone authenticated can read requests they're involved in
+      allow read: if request.auth != null;
+      // Can create if you're the sender
+      allow create: if request.auth != null && 
+                      request.resource.data.fromUserId == request.auth.uid;
+      // Can update if you're the receiver (to accept/reject) or sender (to cancel)
+      allow update: if request.auth != null && 
+                      (resource.data.toUserId == request.auth.uid || 
+                       resource.data.fromUserId == request.auth.uid);
+      // Can delete if you're involved
+      allow delete: if request.auth != null && 
+                      (resource.data.toUserId == request.auth.uid || 
+                       resource.data.fromUserId == request.auth.uid);
+    }
+  }
+}
