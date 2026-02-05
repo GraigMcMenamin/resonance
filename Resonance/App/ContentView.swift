@@ -93,7 +93,7 @@ struct AuthenticatedView: View {
                 
                 LibraryView()
                     .tabItem {
-                        Label("me & my buddies", systemImage: "music.note.list")
+                        Label("me & buddies", systemImage: "music.note.list")
                     }
                 
                 ProfileView()
