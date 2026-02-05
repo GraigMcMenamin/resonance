@@ -113,5 +113,23 @@ service cloud.firestore {
                       (resource.data.toUserId == request.auth.uid || 
                        resource.data.fromUserId == request.auth.uid);
     }
+    
+    // Music Recommendations collection
+    match /recommendations/{recommendationId} {
+      // Allow any authenticated user to read recommendations (needed for buddy feed queries)
+      // Recommendations aren't sensitive - they're meant to be shared
+      allow read: if request.auth != null;
+      // Can create if you're the sender
+      allow create: if request.auth != null && 
+                      request.resource.data.senderId == request.auth.uid;
+      // Can update if you're the receiver (to mark as rated) or sender
+      allow update: if request.auth != null && 
+                      (resource.data.receiverId == request.auth.uid || 
+                       resource.data.senderId == request.auth.uid);
+      // Can delete if you're involved
+      allow delete: if request.auth != null && 
+                      (resource.data.receiverId == request.auth.uid || 
+                       resource.data.senderId == request.auth.uid);
+    }
   }
 }

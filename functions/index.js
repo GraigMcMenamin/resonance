@@ -1,4 +1,5 @@
 const {onRequest} = require("firebase-functions/v2/https");
+const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 
@@ -86,6 +87,111 @@ exports.authenticateWithSpotify = onRequest(
         error: "Internal server error",
         message: error.message,
       });
+    }
+  }
+);
+
+/**
+ * Cloud Function: Send push notification when a music recommendation is created
+ * 
+ * Triggered when a new document is created in the recommendations collection.
+ * Sends a push notification to the receiver's device.
+ */
+exports.onRecommendationCreated = onDocumentCreated(
+  "recommendations/{recommendationId}",
+  async (event) => {
+    const recommendation = event.data?.data();
+    
+    if (!recommendation) {
+      console.log("No recommendation data found");
+      return;
+    }
+
+    const {
+      receiverId,
+      senderUsername,
+      senderDisplayName,
+      itemName,
+      itemType,
+      message,
+    } = recommendation;
+
+    console.log(`📬 New recommendation: ${senderDisplayName} sent ${itemName} to ${receiverId}`);
+
+    try {
+      // Get receiver's FCM tokens from their user document
+      const userDoc = await admin.firestore()
+        .collection("users")
+        .doc(receiverId)
+        .get();
+
+      if (!userDoc.exists) {
+        console.log(`User ${receiverId} not found`);
+        return;
+      }
+
+      const userData = userDoc.data();
+      const fcmTokens = userData.fcmTokens || [];
+
+      if (fcmTokens.length === 0) {
+        console.log(`No FCM tokens for user ${receiverId}`);
+        return;
+      }
+
+      // Build notification content
+      const senderName = senderUsername || senderDisplayName || "Someone";
+      const itemTypeLabel = itemType === "track" ? "song" : itemType;
+      
+      let notificationBody = `${senderName} sent you a ${itemTypeLabel}: ${itemName}`;
+      if (message) {
+        notificationBody += ` - "${message}"`;
+      }
+
+      // Send notification to all of user's devices
+      const notifications = fcmTokens.map(async (token) => {
+        try {
+          await admin.messaging().send({
+            token: token,
+            notification: {
+              title: "🎵 New Music Recommendation",
+              body: notificationBody,
+            },
+            data: {
+              type: "recommendation",
+              recommendationId: event.params.recommendationId,
+              spotifyId: recommendation.spotifyId,
+              itemType: itemType,
+            },
+            apns: {
+              payload: {
+                aps: {
+                  sound: "default",
+                  badge: 1,
+                },
+              },
+            },
+          });
+          console.log(`✅ Notification sent to token: ${token.substring(0, 20)}...`);
+        } catch (error) {
+          console.error(`❌ Error sending to token: ${error.message}`);
+          // If token is invalid, remove it from the user's tokens
+          if (error.code === "messaging/invalid-registration-token" ||
+              error.code === "messaging/registration-token-not-registered") {
+            console.log(`Removing invalid token: ${token.substring(0, 20)}...`);
+            await admin.firestore()
+              .collection("users")
+              .doc(receiverId)
+              .update({
+                fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
+              });
+          }
+        }
+      });
+
+      await Promise.all(notifications);
+      console.log(`📱 Sent notifications to ${fcmTokens.length} device(s)`);
+    } catch (error) {
+      console.error("❌ Error in onRecommendationCreated:", error);
     }
   }
 );

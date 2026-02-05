@@ -15,6 +15,8 @@ struct LibraryView: View {
     @State private var selectedFilter: RatingFilter = .all
     @State private var selectedSection: LibrarySection = .myRatings
     @State private var buddyRatings: [UserRating] = []
+    @State private var buddyRecommendations: [MusicRecommendation] = []
+    @State private var buddyFeedItems: [BuddyFeedItem] = []
     @State private var isLoadingBuddyRatings = false
     
     var body: some View {
@@ -46,6 +48,13 @@ struct LibraryView: View {
             }
             .onChange(of: buddyManager.buddies) { oldValue, newValue in
                 // Reload buddy ratings when buddies list changes
+                if selectedSection == .buddyReviews {
+                    Task {
+                        await loadBuddyRatings()
+                    }
+                }
+            }
+            .onAppear {
                 if selectedSection == .buddyReviews {
                     Task {
                         await loadBuddyRatings()
@@ -110,7 +119,7 @@ struct LibraryView: View {
         VStack(spacing: 0) {
             if isLoadingBuddyRatings {
                 Spacer()
-                ProgressView("loading buddy ratings...")
+                ProgressView("loading buddy activity...")
                 Spacer()
             } else if buddyManager.buddies.isEmpty {
                 VStack(spacing: 12) {
@@ -125,12 +134,12 @@ struct LibraryView: View {
                         .foregroundColor(.secondary)
                 }
                 .frame(maxHeight: .infinity)
-            } else if buddyRatings.isEmpty {
+            } else if buddyFeedItems.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "star.slash")
                         .font(.system(size: 60))
                         .foregroundColor(.gray)
-                    Text("no buddy ratings yet")
+                    Text("no buddy activity yet")
                         .font(.headline)
                         .foregroundColor(.secondary)
                     Text("your buddies haven't rated anything")
@@ -145,9 +154,20 @@ struct LibraryView: View {
                     .padding(.vertical)
                 
                 List {
-                    ForEach(buddyRatings) { rating in
-                        NavigationLink(destination: destinationView(for: rating)) {
-                            LibraryBuddyRatingRow(rating: rating)
+                    ForEach(buddyFeedItems) { item in
+                        switch item {
+                        case .rating(let rating):
+                            NavigationLink(destination: destinationView(for: rating)) {
+                                LibraryBuddyRatingRow(rating: rating)
+                            }
+                        case .recommendation(let rec, let receiverRating):
+                            NavigationLink(destination: destinationView(forRecommendation: rec)) {
+                                RecommendationFeedRow(
+                                    recommendation: rec,
+                                    receiverRating: receiverRating,
+                                    currentUserId: authManager.currentUser?.id
+                                )
+                            }
                         }
                     }
                 }
@@ -167,6 +187,7 @@ struct LibraryView: View {
         }
         
         let buddyIds = buddyManager.buddies.map { $0.id }
+        let currentUserId = authManager.currentUser?.id ?? ""
         
         print("Loading buddy ratings for \(buddyIds.count) buddies: \(buddyIds)")
         
@@ -184,7 +205,43 @@ struct LibraryView: View {
         
         print("Found \(buddyRatings.count) buddy ratings")
         
+        // Also load recommendations
+        do {
+            buddyRecommendations = try await firebaseService.getBuddyRecommendations(
+                buddyIds: buddyIds,
+                currentUserId: currentUserId
+            )
+            print("Found \(buddyRecommendations.count) recommendations")
+        } catch {
+            print("Error loading recommendations: \(error)")
+            buddyRecommendations = []
+        }
+        
+        // Build combined feed
+        buildBuddyFeed()
+        
         isLoadingBuddyRatings = false
+    }
+    
+    private func buildBuddyFeed() {
+        var feedItems: [BuddyFeedItem] = []
+        
+        // Add ratings as feed items
+        for rating in buddyRatings {
+            feedItems.append(.rating(rating))
+        }
+        
+        // Add recommendations as feed items
+        for rec in buddyRecommendations {
+            // Find if receiver has rated this item
+            let receiverRating = ratingsManager.allRatings.first {
+                $0.userId == rec.receiverId && $0.spotifyId == rec.spotifyId
+            }
+            feedItems.append(.recommendation(rec, receiverRating: receiverRating))
+        }
+        
+        // Sort by date (most recent first)
+        buddyFeedItems = feedItems.sorted { $0.date > $1.date }
     }
     
     @ViewBuilder
@@ -211,6 +268,34 @@ struct LibraryView: View {
                 albumName: nil,
                 albumId: nil,
                 imageURL: rating.imageURL.flatMap { URL(string: $0) }
+            )
+        }
+    }
+    
+    @ViewBuilder
+    private func destinationView(forRecommendation rec: MusicRecommendation) -> some View {
+        switch rec.itemType {
+        case .artist:
+            ArtistDetailView(
+                artistId: rec.spotifyId,
+                artistName: rec.itemName,
+                artistImageURL: rec.imageURL.flatMap { URL(string: $0) }
+            )
+        case .album:
+            AlbumDetailView(
+                albumId: rec.spotifyId,
+                albumName: rec.itemName,
+                artistName: rec.artistName ?? "",
+                imageURL: rec.imageURL.flatMap { URL(string: $0) }
+            )
+        case .track:
+            SongDetailView(
+                trackId: rec.spotifyId,
+                trackName: rec.itemName,
+                artistName: rec.artistName ?? "",
+                albumName: nil,
+                albumId: nil,
+                imageURL: rec.imageURL.flatMap { URL(string: $0) }
             )
         }
     }
@@ -617,6 +702,208 @@ struct LibraryBuddyRatingRow: View {
             }
         }
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Recommendation Feed Row
+
+/// Shows a music recommendation in the buddy feed
+/// Displays "X sent Y <music>" with status and optional rating
+struct RecommendationFeedRow: View {
+    let recommendation: MusicRecommendation
+    let receiverRating: UserRating?
+    let currentUserId: String?
+    
+    private var percentageColor: Color {
+        guard let rating = receiverRating else { return .gray }
+        let pct = Double(rating.percentage)
+        switch pct {
+        case 0..<40: return .red
+        case 40..<60: return .orange
+        case 60..<75: return .yellow
+        case 75..<90: return Color(red: 0.6, green: 0.8, blue: 0.2)
+        default: return .green
+        }
+    }
+    
+    private var itemTypeIcon: String {
+        switch recommendation.itemType {
+        case .artist: return "music.mic"
+        case .album: return "square.stack"
+        case .track: return "music.note"
+        }
+    }
+    
+    private var isCurrentUserReceiver: Bool {
+        recommendation.receiverId == currentUserId
+    }
+    
+    private var senderName: String {
+        recommendation.senderUsername ?? recommendation.senderDisplayName
+    }
+    
+    private var receiverName: String {
+        recommendation.receiverUsername ?? recommendation.receiverDisplayName
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header: "sender sent receiver"
+            HStack(spacing: 6) {
+                // Sender avatar
+                avatarView(imageURL: recommendation.senderImageURL)
+                
+                Text(senderName)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                
+                Text("sent")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                // Receiver avatar
+                avatarView(imageURL: recommendation.receiverImageURL)
+                
+                Text(receiverName)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Text(recommendation.sentAt.formatted(date: .abbreviated, time: .omitted))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            
+            // Music item
+            HStack(spacing: 12) {
+                // Item image
+                if let imageURLString = recommendation.imageURL, let url = URL(string: imageURLString) {
+                    CustomAsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 50, height: 50)
+                                .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                        default:
+                            Image(systemName: itemTypeIcon)
+                                .font(.title2)
+                                .foregroundColor(.gray)
+                                .frame(width: 50, height: 50)
+                                .background(Color.gray.opacity(0.2))
+                                .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                        }
+                    }
+                } else {
+                    Image(systemName: itemTypeIcon)
+                        .font(.title2)
+                        .foregroundColor(.gray)
+                        .frame(width: 50, height: 50)
+                        .background(Color.gray.opacity(0.2))
+                        .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(recommendation.itemName)
+                        .font(.headline)
+                        .lineLimit(1)
+                    
+                    if let artistName = recommendation.artistName {
+                        Text(artistName)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                
+                Spacer()
+                
+                // Rating badge or pending status
+                if let rating = receiverRating {
+                    VStack(spacing: 2) {
+                        Text("\(rating.percentage)%")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundColor(percentageColor)
+                        Text("rated")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                } else {
+                    VStack(spacing: 2) {
+                        Image(systemName: "clock")
+                            .font(.title3)
+                            .foregroundColor(.orange)
+                        Text(isCurrentUserReceiver ? "rate it!" : "pending")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                    }
+                }
+            }
+            
+            // Sender's message (if any)
+            if let message = recommendation.message, !message.isEmpty {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "text.bubble.fill")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("\"\(message)\"")
+                        .font(.subheadline)
+                        .italic()
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                }
+                .padding(.top, 4)
+            }
+            
+            // Show receiver's review if they rated it
+            if let rating = receiverRating, rating.hasReviewContent, let content = rating.reviewContent {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "quote.bubble.fill")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(receiverName)'s review:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(content)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            .lineLimit(3)
+                    }
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
+    @ViewBuilder
+    private func avatarView(imageURL: String?) -> some View {
+        if let urlString = imageURL, let url = URL(string: urlString) {
+            CustomAsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 24, height: 24)
+                        .clipShape(Circle())
+                default:
+                    Image(systemName: "person.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.gray)
+                }
+            }
+        } else {
+            Image(systemName: "person.circle.fill")
+                .font(.system(size: 24))
+                .foregroundColor(.gray)
+        }
     }
 }
 

@@ -757,4 +757,149 @@ class FirebaseService: ObservableObject {
         
         return snapshot.documents.count
     }
+    
+    // MARK: - Music Recommendation Operations
+    
+    /// Send a music recommendation to a buddy
+    func sendMusicRecommendation(_ recommendation: MusicRecommendation) async throws {
+        try db.collection("recommendations")
+            .document(recommendation.id)
+            .setData(from: recommendation)
+    }
+    
+    /// Get recommendations sent TO a user (inbox)
+    func getReceivedRecommendations(userId: String) async throws -> [MusicRecommendation] {
+        let snapshot = try await db.collection("recommendations")
+            .whereField("receiverId", isEqualTo: userId)
+            .order(by: "sentAt", descending: true)
+            .getDocuments()
+        
+        return snapshot.documents.compactMap { doc in
+            try? doc.data(as: MusicRecommendation.self)
+        }
+    }
+    
+    /// Get recommendations sent BY a user
+    func getSentRecommendations(userId: String) async throws -> [MusicRecommendation] {
+        let snapshot = try await db.collection("recommendations")
+            .whereField("senderId", isEqualTo: userId)
+            .order(by: "sentAt", descending: true)
+            .getDocuments()
+        
+        return snapshot.documents.compactMap { doc in
+            try? doc.data(as: MusicRecommendation.self)
+        }
+    }
+    
+    /// Get recommendations involving any of the specified user IDs (for buddy feed)
+    /// This fetches recommendations where any of the buddies are sender or receiver
+    func getBuddyRecommendations(buddyIds: [String], currentUserId: String) async throws -> [MusicRecommendation] {
+        guard !buddyIds.isEmpty else { return [] }
+        
+        // Include current user in the search to see recommendations they're involved in
+        let allUserIds = Set(buddyIds + [currentUserId])
+        var allRecommendations: [MusicRecommendation] = []
+        
+        // Firestore 'in' queries are limited to 10 items
+        let chunks = Array(allUserIds).chunked(into: 10)
+        
+        for chunk in chunks {
+            // Get recommendations where sender is in the list
+            let senderSnapshot = try await db.collection("recommendations")
+                .whereField("senderId", in: chunk)
+                .order(by: "sentAt", descending: true)
+                .limit(to: 50)
+                .getDocuments()
+            
+            let senderRecs = senderSnapshot.documents.compactMap { doc in
+                try? doc.data(as: MusicRecommendation.self)
+            }
+            
+            allRecommendations.append(contentsOf: senderRecs)
+            
+            // Get recommendations where receiver is in the list
+            let receiverSnapshot = try await db.collection("recommendations")
+                .whereField("receiverId", in: chunk)
+                .order(by: "sentAt", descending: true)
+                .limit(to: 50)
+                .getDocuments()
+            
+            let receiverRecs = receiverSnapshot.documents.compactMap { doc in
+                try? doc.data(as: MusicRecommendation.self)
+            }
+            
+            allRecommendations.append(contentsOf: receiverRecs)
+        }
+        
+        // Deduplicate and filter: only show recommendations where BOTH sender and receiver are visible to current user
+        // (either they are buddies, or current user is involved)
+        let buddyIdSet = Set(buddyIds)
+        let uniqueRecs = Dictionary(grouping: allRecommendations) { $0.id }
+            .compactMap { $0.value.first }
+            .filter { rec in
+                // Show if current user is involved
+                if rec.senderId == currentUserId || rec.receiverId == currentUserId {
+                    return true
+                }
+                // Show if both sender and receiver are buddies
+                return buddyIdSet.contains(rec.senderId) && buddyIdSet.contains(rec.receiverId)
+            }
+            .sorted { $0.sentAt > $1.sentAt }
+        
+        return uniqueRecs
+    }
+    
+    /// Update recommendation status when receiver rates the item
+    func updateRecommendationStatus(recommendationId: String, status: MusicRecommendation.RecommendationStatus, ratingId: String?) async throws {
+        var updateData: [String: Any] = ["status": status.rawValue]
+        if let ratingId = ratingId {
+            updateData["receiverRatingId"] = ratingId
+        }
+        
+        try await db.collection("recommendations")
+            .document(recommendationId)
+            .updateData(updateData)
+    }
+    
+    /// Check if a recommendation exists for this sender/receiver/item combo
+    func getExistingRecommendation(senderId: String, receiverId: String, spotifyId: String) async throws -> MusicRecommendation? {
+        // Search for any recommendation with matching sender, receiver, and item
+        let snapshot = try await db.collection("recommendations")
+            .whereField("senderId", isEqualTo: senderId)
+            .whereField("receiverId", isEqualTo: receiverId)
+            .whereField("spotifyId", isEqualTo: spotifyId)
+            .limit(to: 1)
+            .getDocuments()
+        
+        return snapshot.documents.first.flatMap { doc in
+            try? doc.data(as: MusicRecommendation.self)
+        }
+    }
+    
+    /// Delete a recommendation
+    func deleteRecommendation(id: String) async throws {
+        try await db.collection("recommendations")
+            .document(id)
+            .delete()
+    }
+    
+    // MARK: - FCM Token Management
+    
+    /// Save an FCM token for push notifications
+    func saveFCMToken(userId: String, token: String) async throws {
+        try await db.collection("users")
+            .document(userId)
+            .updateData([
+                "fcmTokens": FieldValue.arrayUnion([token])
+            ])
+    }
+    
+    /// Remove an FCM token (e.g., on logout)
+    func removeFCMToken(userId: String, token: String) async throws {
+        try await db.collection("users")
+            .document(userId)
+            .updateData([
+                "fcmTokens": FieldValue.arrayRemove([token])
+            ])
+    }
 }

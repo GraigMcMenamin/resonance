@@ -215,6 +215,9 @@ struct AppUser: Codable, Identifiable {
     // Auth method tracking
     var authMethod: AuthMethod = .spotify
     
+    // Push notification tokens (FCM)
+    var fcmTokens: [String]?
+    
     enum AuthMethod: String, Codable {
         case spotify
         case emailPassword
@@ -223,7 +226,7 @@ struct AppUser: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, firebaseUID, username, usernameLowercase
         case spotifyId, spotifyAccessToken, spotifyRefreshToken, tokenExpirationDate
-        case displayName, email, imageURL, createdAt, authMethod
+        case displayName, email, imageURL, createdAt, authMethod, fcmTokens
     }
 }
 
@@ -588,5 +591,85 @@ struct TopItem: Codable, Identifiable {
         self.name = album.name
         self.subtitle = album.artistNames
         self.imageURL = album.imageURL
+    }
+}
+
+// MARK: - Music Recommendation Model
+
+/// Represents a music recommendation sent from one user to another
+/// Shows up in the buddy feed for all mutual buddies
+struct MusicRecommendation: Codable, Identifiable, Equatable {
+    var id: String // Format: "senderId_receiverId_spotifyId_timestamp"
+    let senderId: String
+    let receiverId: String
+    let senderUsername: String?
+    let senderDisplayName: String
+    let senderImageURL: String?
+    let receiverUsername: String?
+    let receiverDisplayName: String
+    let receiverImageURL: String?
+    
+    // Music item details
+    let spotifyId: String
+    let itemType: ItemType
+    let itemName: String
+    let artistName: String?
+    let imageURL: String?
+    
+    // Optional message from sender (max 100 chars)
+    let message: String?
+    
+    // Timestamps
+    let sentAt: Date
+    
+    // Status tracking
+    var status: RecommendationStatus
+    var receiverRatingId: String? // Links to the receiver's rating if they rated it
+    
+    enum ItemType: String, Codable {
+        case artist
+        case album
+        case track
+    }
+    
+    enum RecommendationStatus: String, Codable {
+        case pending // Receiver hasn't rated yet
+        case rated // Receiver has rated the item
+    }
+    
+    static func makeId(senderId: String, receiverId: String, spotifyId: String) -> String {
+        let timestamp = Int(Date().timeIntervalSince1970 * 1000)
+        return "\(senderId)_\(receiverId)_\(spotifyId)_\(timestamp)"
+    }
+    
+    static func == (lhs: MusicRecommendation, rhs: MusicRecommendation) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.status == rhs.status &&
+        lhs.receiverRatingId == rhs.receiverRatingId
+    }
+}
+
+/// A combined feed item that can be either a rating or a recommendation
+/// Used to display a unified buddy activity feed
+enum BuddyFeedItem: Identifiable {
+    case rating(UserRating)
+    case recommendation(MusicRecommendation, receiverRating: UserRating?)
+    
+    var id: String {
+        switch self {
+        case .rating(let rating):
+            return "rating_\(rating.id)"
+        case .recommendation(let rec, _):
+            return "rec_\(rec.id)"
+        }
+    }
+    
+    var date: Date {
+        switch self {
+        case .rating(let rating):
+            return rating.dateRated
+        case .recommendation(let rec, _):
+            return rec.sentAt
+        }
     }
 }

@@ -17,6 +17,7 @@ struct AlbumDetailView: View {
     @EnvironmentObject var ratingsManager: RatingsManager
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
+    @EnvironmentObject var buddyManager: BuddyManager
     
     @State private var album: SpotifyAlbumFull?
     @State private var isLoading = true
@@ -24,6 +25,7 @@ struct AlbumDetailView: View {
     @State private var selectedItem: RatableItem?
     @State private var buddies: [Buddy] = []
     @State private var buddyRatings: [UserRating] = []
+    @State private var showSendSheet = false
     
     var body: some View {
         ZStack {
@@ -80,6 +82,18 @@ struct AlbumDetailView: View {
             RatingSheet(item: item, ratingsManager: ratingsManager)
                 .environmentObject(authManager)
                 .environmentObject(firebaseService)
+        }
+        .sheet(isPresented: $showSendSheet) {
+            SendMusicView(musicItem: MusicItemToSend(
+                spotifyId: albumId,
+                itemType: .album,
+                name: album?.name ?? albumName,
+                artistName: album?.artistNames ?? artistName,
+                imageURL: album?.imageURL ?? imageURL
+            ))
+            .environmentObject(firebaseService)
+            .environmentObject(authManager)
+            .environmentObject(buddyManager)
         }
         .task {
             await spotifyService.authenticate()
@@ -242,6 +256,26 @@ struct AlbumDetailView: View {
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(Color.white.opacity(0.3), lineWidth: 1)
                     )
+                }
+                
+                // Send to Buddy Button
+                if !authManager.isGuestMode {
+                    Button(action: {
+                        showSendSheet = true
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "paperplane")
+                            Text("send")
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                        )
+                    }
                 }
             }
             
