@@ -831,8 +831,8 @@ class FirebaseService: ObservableObject {
             allRecommendations.append(contentsOf: receiverRecs)
         }
         
-        // Deduplicate and filter: only show recommendations where BOTH sender and receiver are visible to current user
-        // (either they are buddies, or current user is involved)
+        // Deduplicate and filter: show recommendations where current user is involved OR either sender/receiver is a buddy
+        // This allows discovering mutual friends through recommendations
         let buddyIdSet = Set(buddyIds)
         let uniqueRecs = Dictionary(grouping: allRecommendations) { $0.id }
             .compactMap { $0.value.first }
@@ -841,8 +841,8 @@ class FirebaseService: ObservableObject {
                 if rec.senderId == currentUserId || rec.receiverId == currentUserId {
                     return true
                 }
-                // Show if both sender and receiver are buddies
-                return buddyIdSet.contains(rec.senderId) && buddyIdSet.contains(rec.receiverId)
+                // Show if EITHER sender OR receiver is a buddy (to help discover mutual friends)
+                return buddyIdSet.contains(rec.senderId) || buddyIdSet.contains(rec.receiverId)
             }
             .sorted { $0.sentAt > $1.sentAt }
         
