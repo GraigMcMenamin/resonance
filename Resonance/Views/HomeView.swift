@@ -634,7 +634,7 @@ struct PendingRecommendationCard: View {
                             .lineLimit(1)
                     }
                     
-                    Text("from @\(recommendation.senderUsername ?? recommendation.senderDisplayName)")
+                    Text("from @\(recommendation.senderUsername ?? "unknown")")
                         .font(.caption2)
                         .foregroundColor(.orange)
                 }

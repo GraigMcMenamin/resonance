@@ -684,11 +684,11 @@ struct UserListView: View {
                             if let username = user.username {
                                 Text("@\(username)")
                                     .font(.headline)
+                            } else {
+                                Text("User")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
                             }
-                            
-                            Text(user.displayName)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
                         }
                     }
                 }

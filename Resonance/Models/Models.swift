@@ -207,7 +207,6 @@ struct AppUser: Codable, Identifiable {
     var tokenExpirationDate: Date?
     
     // Common fields
-    var displayName: String
     var email: String?
     var imageURL: String?
     var createdAt: Date = Date()
@@ -226,7 +225,7 @@ struct AppUser: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, firebaseUID, username, usernameLowercase
         case spotifyId, spotifyAccessToken, spotifyRefreshToken, tokenExpirationDate
-        case displayName, email, imageURL, createdAt, authMethod, fcmTokens
+        case email, imageURL, createdAt, authMethod, fcmTokens
     }
 }
 
@@ -272,7 +271,6 @@ struct UserRating: Codable, Identifiable, Equatable {
     let imageURL: String?
     let percentage: Int // 0-100
     let dateRated: Date
-    var userName: String? // Display name of the user who rated
     var username: String? // Unique Resonance username
     var userImageURL: String? // Profile image URL of the user who rated
     
@@ -326,7 +324,6 @@ struct UserRating: Codable, Identifiable, Equatable {
             reviewLength: reviewLength,
             dateCreated: reviewDateCreated ?? dateRated,
             dateUpdated: reviewDateUpdated,
-            userName: userName,
             username: username,
             userImageURL: userImageURL
         )
@@ -370,7 +367,6 @@ struct Review: Codable, Identifiable, Equatable {
     let reviewLength: ReviewLength? // Short or Long (nil if no review content)
     let dateCreated: Date
     var dateUpdated: Date?
-    var userName: String? // Display name of the user who reviewed
     var username: String? // Unique Resonance username
     var userImageURL: String? // Profile image URL of the user who reviewed
     
@@ -415,7 +411,6 @@ struct ReviewLike: Codable, Identifiable, Equatable {
     let reviewId: String // The review being liked
     let userId: String // User who liked the review
     let username: String? // Username of the liker
-    let userDisplayName: String? // Display name of the liker
     let userImageURL: String? // Profile image of the liker
     let createdAt: Date
     
@@ -435,7 +430,6 @@ struct ReviewComment: Codable, Identifiable, Equatable {
     let reviewId: String // The review being commented on
     let userId: String // User who wrote the comment
     let username: String? // Username of the commenter
-    let userDisplayName: String? // Display name of the commenter
     let userImageURL: String? // Profile image of the commenter
     let content: String // The comment text (max 100 characters)
     let createdAt: Date
@@ -455,7 +449,6 @@ struct CommentLike: Codable, Identifiable, Equatable {
     let commentId: String // The comment being liked
     let userId: String // User who liked the comment
     let username: String? // Username of the liker
-    let userDisplayName: String? // Display name of the liker
     let createdAt: Date
     
     static func makeId(commentId: String, userId: String) -> String {
@@ -527,10 +520,8 @@ struct BuddyRequest: Codable, Identifiable {
     let fromUserId: String
     let toUserId: String
     let fromUsername: String
-    let fromDisplayName: String
     let fromImageURL: String?
     let toUsername: String?
-    let toDisplayName: String
     let toImageURL: String?
     let status: BuddyRequestStatus
     let createdAt: Date
@@ -552,7 +543,6 @@ struct Buddy: Codable, Identifiable, Equatable {
     var id: String // The buddy's userId
     let oderId: String
     let username: String?
-    let displayName: String
     let imageURL: String?
     let buddySince: Date
 }
@@ -603,10 +593,8 @@ struct MusicRecommendation: Codable, Identifiable, Equatable {
     let senderId: String
     let receiverId: String
     let senderUsername: String?
-    let senderDisplayName: String
     let senderImageURL: String?
     let receiverUsername: String?
-    let receiverDisplayName: String
     let receiverImageURL: String?
     
     // Music item details

@@ -73,7 +73,7 @@ struct OtherUserProfileView: View {
                 }
             }
         }
-        .navigationTitle(user.username.map { "@\($0)" } ?? user.displayName)
+        .navigationTitle(user.username.map { "@\($0)" } ?? "User")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             print("DEBUG OtherUserProfileView: user.id = \(user.id)")
@@ -155,7 +155,7 @@ struct OtherUserProfileView: View {
                     
                 case .requestReceived:
                     VStack(spacing: 8) {
-                        Text("\(user.username ?? user.displayName) wants to be your buddy!")
+                        Text("\(user.username ?? "This user") wants to be your buddy!")
                             .font(.subheadline)
                             .foregroundColor(.white)
                         
@@ -266,7 +266,7 @@ struct OtherUserProfileView: View {
     
     @ViewBuilder
     private func buddiesSection() -> some View {
-        NavigationLink(destination: BuddiesListView(buddies: viewModel.buddies, title: "\(user.username ?? user.displayName)'s buddies")) {
+        NavigationLink(destination: BuddiesListView(buddies: viewModel.buddies, title: "\(user.username ?? "User")'s buddies")) {
             HStack {
                 Image(systemName: "person.2.fill")
                     .font(.title2)
@@ -339,10 +339,10 @@ struct OtherUserProfileView: View {
                     .fontWeight(.bold)
                     .foregroundColor(.white)
             } else {
-                Text(user.displayName)
+                Text("User")
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.white)
+                    .foregroundColor(.white.opacity(0.5))
             }
             
             // Rating Stats
@@ -694,8 +694,7 @@ class OtherUserProfileViewModel: ObservableObject {
         id: "test",
         firebaseUID: "test",
         username: "testuser",
-        usernameLowercase: "testuser",
-        displayName: "Test User"
+        usernameLowercase: "testuser"
     )
     
     return NavigationView {

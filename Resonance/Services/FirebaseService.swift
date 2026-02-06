@@ -208,12 +208,12 @@ class FirebaseService: ObservableObject {
         return Array(aggregated.prefix(limit))
     }
     
-    func getMostActiveUsers(limit: Int = 10) -> [(userId: String, userName: String?, ratingCount: Int)] {
+    func getMostActiveUsers(limit: Int = 10) -> [(userId: String, username: String?, ratingCount: Int)] {
         let grouped = Dictionary(grouping: allRatings) { $0.userId }
         
         return grouped.map { userId, ratings in
-            let userName = ratings.first?.userName
-            return (userId: userId, userName: userName, ratingCount: ratings.count)
+            let username = ratings.first?.username
+            return (userId: userId, username: username, ratingCount: ratings.count)
         }
         .sorted { $0.ratingCount > $1.ratingCount }
         .prefix(limit)
@@ -289,11 +289,9 @@ class FirebaseService: ObservableObject {
             id: requestId,
             fromUserId: fromUser.id,
             toUserId: toUser.id,
-            fromUsername: fromUser.username ?? fromUser.displayName,
-            fromDisplayName: fromUser.displayName,
+            fromUsername: fromUser.username ?? "User",
             fromImageURL: fromUser.imageURL,
             toUsername: toUser.username,
-            toDisplayName: toUser.displayName,
             toImageURL: toUser.imageURL,
             status: .pending,
             createdAt: Date()
@@ -340,7 +338,6 @@ class FirebaseService: ObservableObject {
             id: request.toUserId,
             oderId: request.toUserId,
             username: request.toUsername,
-            displayName: request.toDisplayName,
             imageURL: request.toImageURL,
             buddySince: now
         )
@@ -355,7 +352,6 @@ class FirebaseService: ObservableObject {
             id: request.fromUserId,
             oderId: request.fromUserId,
             username: request.fromUsername,
-            displayName: request.fromDisplayName,
             imageURL: request.fromImageURL,
             buddySince: now
         )
@@ -594,7 +590,6 @@ class FirebaseService: ObservableObject {
             reviewId: reviewId,
             userId: user.id,
             username: user.username,
-            userDisplayName: user.displayName,
             userImageURL: user.imageURL,
             createdAt: Date()
         )
@@ -656,7 +651,6 @@ class FirebaseService: ObservableObject {
             reviewId: reviewId,
             userId: user.id,
             username: user.username,
-            userDisplayName: user.displayName,
             userImageURL: user.imageURL,
             content: content,
             createdAt: Date()
@@ -710,7 +704,6 @@ class FirebaseService: ObservableObject {
             commentId: commentId,
             userId: user.id,
             username: user.username,
-            userDisplayName: user.displayName,
             createdAt: Date()
         )
         

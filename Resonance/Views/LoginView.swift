@@ -434,7 +434,7 @@ struct EmailSignupView: View {
                         // Sign Up Button
                         Button(action: {
                             Task {
-                                await authManager.signUpWithEmail(email: email, password: password, displayName: email.components(separatedBy: "@").first ?? "User")
+                                await authManager.signUpWithEmail(email: email, password: password)
                                 if authManager.errorMessage == nil {
                                     // Signup successful, show verification screen
                                     signupSuccessEmail = email

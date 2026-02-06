@@ -201,11 +201,11 @@ struct ReviewCard: View {
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
-                    } else if let displayName = review.userName {
-                        Text(displayName)
+                    } else {
+                        Text("User")
                             .font(.subheadline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.white)
+                            .foregroundColor(.white.opacity(0.5))
                     }
                     
                     Text(formattedDate)
@@ -549,11 +549,11 @@ struct CommentRow: View {
                             .font(.caption)
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
-                    } else if let displayName = comment.userDisplayName {
-                        Text(displayName)
+                    } else {
+                        Text("User")
                             .font(.caption)
                             .fontWeight(.semibold)
-                            .foregroundColor(.white)
+                            .foregroundColor(.white.opacity(0.5))
                     }
                     
                     Text("•")

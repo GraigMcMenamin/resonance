@@ -104,7 +104,7 @@ class AuthenticationManager: NSObject, ObservableObject {
             // Step 3: Get Spotify user profile
             print("🔐 Step 3: Fetching Spotify profile...")
             let spotifyProfile = try await getSpotifyUserProfile(accessToken: tokens.accessToken)
-            print("✅ Got profile: \(spotifyProfile.displayName)")
+            print("✅ Got profile: \(spotifyProfile.id)")
             
             // Step 4: Sign into Firebase with custom token or anonymous auth
             print("🔐 Step 4: Signing into Firebase...")
@@ -130,7 +130,6 @@ class AuthenticationManager: NSObject, ObservableObject {
                     spotifyAccessToken: tokens.accessToken,
                     spotifyRefreshToken: tokens.refreshToken,
                     tokenExpirationDate: Date().addingTimeInterval(TimeInterval(tokens.expiresIn)),
-                    displayName: spotifyProfile.displayName,
                     email: spotifyProfile.email,
                     imageURL: spotifyProfile.images?.first?.url,
                     authMethod: .spotify
@@ -154,7 +153,7 @@ class AuthenticationManager: NSObject, ObservableObject {
     
     // MARK: - Email/Password Authentication
     
-    func signUpWithEmail(email: String, password: String, displayName: String) async {
+    func signUpWithEmail(email: String, password: String) async {
         isLoading = true
         errorMessage = nil
         
@@ -183,7 +182,6 @@ class AuthenticationManager: NSObject, ObservableObject {
                 spotifyAccessToken: nil,
                 spotifyRefreshToken: nil,
                 tokenExpirationDate: nil,
-                displayName: displayName,
                 email: email,
                 imageURL: nil,
                 authMethod: .emailPassword
@@ -304,7 +302,7 @@ class AuthenticationManager: NSObject, ObservableObject {
             
             let user = try Firestore.Decoder().decode(AppUser.self, from: data)
             self.currentUser = user
-            print("✅ Loaded user profile: \(user.displayName)")
+            print("✅ Loaded user profile: @\(user.username ?? user.id)")
             return user
         } catch {
             print("❌ Error loading user profile: \(error)")
@@ -500,7 +498,7 @@ class AuthenticationManager: NSObject, ObservableObject {
         let db = Firestore.firestore()
         do {
             try db.collection("users").document(user.firebaseUID).setData(from: user)
-            print("✅ Saved user profile for: \(user.displayName)")
+            print("✅ Saved user profile for: @\(user.username ?? user.id)")
         } catch {
             print("❌ Error saving user profile: \(error)")
         }
