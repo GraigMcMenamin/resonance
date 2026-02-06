@@ -635,6 +635,7 @@ struct MusicRecommendation: Codable, Identifiable, Equatable {
     enum RecommendationStatus: String, Codable {
         case pending // Receiver hasn't rated yet
         case rated // Receiver has rated the item
+        case ignored // Receiver ignored the recommendation
     }
     
     static func makeId(senderId: String, receiverId: String, spotifyId: String) -> String {

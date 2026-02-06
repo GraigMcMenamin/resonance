@@ -775,6 +775,21 @@ struct RecommendationFeedRow: View {
                     .foregroundColor(.secondary)
             }
             
+            // Sender's message (if any) - "and said: message"
+            if let message = recommendation.message, !message.isEmpty {
+                HStack(alignment: .top, spacing: 4) {
+                    Text("and said:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                }
+                .padding(.leading, 30)
+            }
+            
             // Music item
             HStack(spacing: 12) {
                 // Item image
@@ -836,27 +851,11 @@ struct RecommendationFeedRow: View {
                         Image(systemName: "clock")
                             .font(.title3)
                             .foregroundColor(.orange)
-                        Text(isCurrentUserReceiver ? "rate it!" : "pending")
+                        Text(isCurrentUserReceiver ? "tap to rate" : "pending")
                             .font(.caption2)
                             .foregroundColor(.orange)
                     }
                 }
-            }
-            
-            // Sender's message (if any)
-            if let message = recommendation.message, !message.isEmpty {
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "text.bubble.fill")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text("\"\(message)\"")
-                        .font(.subheadline)
-                        .italic()
-                        .foregroundColor(.primary)
-                        .lineLimit(2)
-                }
-                .padding(.top, 4)
             }
             
             // Show receiver's review if they rated it
