@@ -624,7 +624,7 @@ struct LibraryBuddyRatingRow: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(rating.username ?? rating.userName ?? "Unknown")
+                    Text(rating.username ?? "Unknown")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                     Text(rating.dateRated.formatted(date: .abbreviated, time: .omitted))
@@ -739,11 +739,11 @@ struct RecommendationFeedRow: View {
     }
     
     private var senderName: String {
-        recommendation.senderUsername ?? recommendation.senderDisplayName
+        recommendation.senderUsername ?? "unknown"
     }
     
     private var receiverName: String {
-        recommendation.receiverUsername ?? recommendation.receiverDisplayName
+        recommendation.receiverUsername ?? "unknown"
     }
     
     var body: some View {

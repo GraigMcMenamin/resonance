@@ -190,10 +190,10 @@ struct ProfileView: View {
                     .fontWeight(.bold)
                     .foregroundColor(.white)
             } else {
-                Text(authManager.currentUser?.displayName ?? "User")
+                Text("User")
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.white)
+                    .foregroundColor(.white.opacity(0.5))
             }
             
             // Rating Count

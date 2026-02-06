@@ -86,11 +86,11 @@ struct BuddiesListView: View {
                     Text("@\(username)")
                         .font(.headline)
                         .foregroundColor(.white)
+                } else {
+                    Text("User")
+                        .font(.headline)
+                        .foregroundColor(.white.opacity(0.5))
                 }
-                
-                Text(buddy.displayName)
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
             }
             
             Spacer()
@@ -105,7 +105,6 @@ struct BuddiesListView: View {
             firebaseUID: buddy.id,
             username: buddy.username,
             usernameLowercase: buddy.username?.lowercased(),
-            displayName: buddy.displayName,
             imageURL: buddy.imageURL
         )
         OtherUserProfileView(user: user)

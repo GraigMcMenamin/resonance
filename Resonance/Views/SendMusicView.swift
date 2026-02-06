@@ -79,7 +79,7 @@ struct SendMusicView: View {
                 }
             } message: {
                 if let buddy = selectedBuddy {
-                    Text("Sent \(musicItem.name) to @\(buddy.username ?? buddy.displayName)")
+                    Text("Sent \(musicItem.name) to @\(buddy.username ?? "user")")
                 }
             }
             .onAppear {
@@ -265,10 +265,8 @@ struct SendMusicView: View {
                     senderId: currentUser.id,
                     receiverId: buddy.id,
                     senderUsername: currentUser.username,
-                    senderDisplayName: currentUser.displayName,
                     senderImageURL: currentUser.imageURL,
                     receiverUsername: buddy.username,
-                    receiverDisplayName: buddy.displayName,
                     receiverImageURL: buddy.imageURL,
                     spotifyId: musicItem.spotifyId,
                     itemType: musicItem.itemType,
@@ -332,11 +330,12 @@ struct BuddySelectRow: View {
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
+                    } else {
+                        Text("User")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white.opacity(0.5))
                     }
-                    
-                    Text(buddy.displayName)
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.7))
                 }
                 
                 Spacer()

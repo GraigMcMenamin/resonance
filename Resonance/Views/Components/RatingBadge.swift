@@ -269,14 +269,12 @@ struct BuddyRatingRow: View {
         return URL(string: urlString)
     }
     
-    /// Display name: prefer username, then fall back to userName/displayName
+    /// Display name: prefer username
     private var displayUsername: String {
         if let username = username, !username.isEmpty {
             return "@\(username)"
-        } else if let userName = rating.userName, !userName.isEmpty {
-            return userName
         } else {
-            return "Buddy"
+            return "User"
         }
     }
     

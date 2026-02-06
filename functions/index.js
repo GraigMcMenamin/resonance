@@ -110,13 +110,12 @@ exports.onRecommendationCreated = onDocumentCreated(
     const {
       receiverId,
       senderUsername,
-      senderDisplayName,
       itemName,
       itemType,
       message,
     } = recommendation;
 
-    console.log(`📬 New recommendation: ${senderDisplayName} sent ${itemName} to ${receiverId}`);
+    console.log(`📬 New recommendation: ${senderUsername || 'Someone'} sent ${itemName} to ${receiverId}`);
 
     try {
       // Get receiver's FCM tokens from their user document
@@ -139,7 +138,7 @@ exports.onRecommendationCreated = onDocumentCreated(
       }
 
       // Build notification content
-      const senderName = senderUsername || senderDisplayName || "Someone";
+      const senderName = senderUsername || "Someone";
       const itemTypeLabel = itemType === "track" ? "song" : itemType;
       
       let notificationBody = `${senderName} sent you a ${itemTypeLabel}: ${itemName}`;
