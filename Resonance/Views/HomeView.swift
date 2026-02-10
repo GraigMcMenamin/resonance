@@ -143,16 +143,16 @@ struct HomeView: View {
             Text("This won't delete the recommendation, but it will remove it from your pending list.")
         }
         .onChange(of: selectedPeriod) { oldValue, newValue in
-            print("📅 [HomeView] Period changed to \(newValue.rawValue)")
+            print("[HomeView] Period changed to \(newValue.rawValue)")
             updateCharts()
         }
         .onChange(of: firebaseService.allRatings) { oldValue, newValue in
-            print("🔄 [HomeView] Ratings changed: \(oldValue.count) → \(newValue.count)")
+            print("[HomeView] Ratings changed: \(oldValue.count) → \(newValue.count)")
             updateCharts()
             loadPendingRecommendations()
         }
         .onChange(of: authManager.currentUser?.id) { oldValue, newValue in
-            print("👤 [HomeView] User changed, reloading recommendations")
+            print("[HomeView] User changed, reloading recommendations")
             if newValue != nil {
                 loadPendingRecommendations()
             } else {
@@ -160,7 +160,7 @@ struct HomeView: View {
             }
         }
         .onAppear {
-            print("👀 [HomeView] Appeared, updating charts...")
+            print("[HomeView] Appeared, updating charts...")
             updateCharts()
             loadPendingRecommendations()
         }
@@ -212,17 +212,17 @@ struct HomeView: View {
     
     private func loadPendingRecommendations() {
         guard let userId = authManager.currentUser?.id else {
-            print("⚠️ [HomeView] No user ID, skipping recommendation load")
+            print("[HomeView] No user ID, skipping recommendation load")
             return
         }
         
-        print("🔄 [HomeView] Loading recommendations for user: \(userId)")
-        print("📊 [HomeView] Current ratings count: \(firebaseService.allRatings.count)")
+        print("[HomeView] Loading recommendations for user: \(userId)")
+        print("[HomeView] Current ratings count: \(firebaseService.allRatings.count)")
         
         Task {
             do {
                 let allRecommendations = try await firebaseService.getReceivedRecommendations(userId: userId)
-                print("📥 [HomeView] Fetched \(allRecommendations.count) total recommendations")
+                print("[HomeView] Fetched \(allRecommendations.count) total recommendations")
                 
                 // Debug: print each recommendation
                 for (index, rec) in allRecommendations.enumerated() {
@@ -233,7 +233,7 @@ struct HomeView: View {
                 // Only check against the CURRENT USER's ratings, not all ratings
                 let myRatings = firebaseService.allRatings.filter { $0.userId == userId }
                 let ratingsSet = Set(myRatings.map { $0.spotifyId })
-                print("🎵 [HomeView] Current user's rated spotifyIds: \(ratingsSet)")
+                print("[HomeView] Current user's rated spotifyIds: \(ratingsSet)")
                 
                 pendingRecommendations = allRecommendations.filter { rec in
                     let isPending = rec.status == .pending
@@ -242,9 +242,9 @@ struct HomeView: View {
                     return isPending && notRated
                 }
                 
-                print("📬 [HomeView] Loaded \(pendingRecommendations.count) pending recommendations")
+                print("[HomeView] Loaded \(pendingRecommendations.count) pending recommendations")
             } catch {
-                print("❌ [HomeView] Error loading recommendations: \(error)")
+                print("[HomeView] Error loading recommendations: \(error)")
             }
         }
     }
@@ -258,9 +258,9 @@ struct HomeView: View {
                     ratingId: nil
                 )
                 pendingRecommendations.removeAll { $0.id == recommendation.id }
-                print("✅ [HomeView] Ignored recommendation: \(recommendation.itemName)")
+                print("[HomeView] Ignored recommendation: \(recommendation.itemName)")
             } catch {
-                print("❌ [HomeView] Error ignoring recommendation: \(error)")
+                print("[HomeView] Error ignoring recommendation: \(error)")
             }
         }
     }
@@ -321,7 +321,7 @@ struct HomeView: View {
     private func updateCharts() {
         let filterDate = selectedPeriod.dateFilter
         
-        print("📊 [HomeView] Updating charts with \(firebaseService.allRatings.count) total ratings")
+        print("[HomeView] Updating charts with \(firebaseService.allRatings.count) total ratings")
         
         // Filter ratings by time period
         let filteredRatings = firebaseService.allRatings.filter { rating in
@@ -329,14 +329,14 @@ struct HomeView: View {
             return rating.dateRated >= filterDate
         }
         
-        print("🔍 [HomeView] Filtered to \(filteredRatings.count) ratings for period: \(selectedPeriod.rawValue)")
+        print("[HomeView] Filtered to \(filteredRatings.count) ratings for period: \(selectedPeriod.rawValue)")
         
         // Get aggregated ratings by type
         topSongs = getAggregatedRatings(from: filteredRatings, type: .track, limit: 10)
         topArtists = getAggregatedRatings(from: filteredRatings, type: .artist, limit: 10)
         topAlbums = getAggregatedRatings(from: filteredRatings, type: .album, limit: 10)
         
-        print("🎵 [HomeView] Charts updated: \(topSongs.count) songs, \(topArtists.count) artists, \(topAlbums.count) albums")
+        print("[HomeView] Charts updated: \(topSongs.count) songs, \(topArtists.count) artists, \(topAlbums.count) albums")
     }
     
     private func getAggregatedRatings(from ratings: [UserRating], type: UserRating.RatingType, limit: Int) -> [AggregatedRating] {
@@ -417,7 +417,7 @@ struct ChartSection: View {
                 .font(.title2)
                 .fontWeight(.bold)
                 .foregroundColor(.white)
-                .padding(.horizontal)
+                .padding(.horizontal, 12)
             
             if items.isEmpty {
                 EmptyChartView()
@@ -434,7 +434,7 @@ struct ChartSection: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 8)
             }
         }
     }
@@ -476,13 +476,13 @@ struct ChartItemRow: View {
     let type: UserRating.RatingType
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             // Rank
             Text("\(rank)")
-                .font(.subheadline)
+                .font(.caption)
                 .fontWeight(.bold)
-                .foregroundColor(.white.opacity(0.7))
-                .frame(width: 25)
+                .foregroundColor(.white.opacity(0.6))
+                .frame(width: 16)
             
             // Album Art
             AsyncImage(url: item.imageURL.flatMap { URL(string: $0) }) { image in
@@ -493,11 +493,11 @@ struct ChartItemRow: View {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(Color.gray.opacity(0.3))
             }
-            .frame(width: 45, height: 45)
+            .frame(width: 50, height: 50)
             .clipShape(type == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
             
             // Info
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(item.name)
                     .font(.subheadline)
                     .fontWeight(.semibold)
@@ -511,27 +511,21 @@ struct ChartItemRow: View {
                         .lineLimit(1)
                 }
                 
-                HStack(spacing: 8) {
-                    Text("\(item.totalRatings) rating\(item.totalRatings == 1 ? "" : "s")")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                }
+                Text("\(item.totalRatings) rating\(item.totalRatings == 1 ? "" : "s")")
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.5))
             }
             
-            Spacer()
+            Spacer(minLength: 4)
             
             // Percentage
             Text(String(format: "%.1f%%", item.averagePercentage))
-                .font(.headline)
+                .font(.subheadline)
                 .fontWeight(.bold)
                 .foregroundColor(.white)
-            
-            // Chevron
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.3))
+                .frame(minWidth: 55, alignment: .trailing)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 8)
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 12)

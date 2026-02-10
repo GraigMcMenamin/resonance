@@ -49,14 +49,14 @@ class AuthenticationManager: NSObject, ObservableObject {
                         // For email users, check if email is verified
                         // For Spotify users, skip email verification check
                         if profile.authMethod == .emailPassword && !user.isEmailVerified {
-                            print("⚠️ Email not verified, not auto-logging in")
+                            print("Email not verified, not auto-logging in")
                             try? Auth.auth().signOut()
                             self.currentUser = nil
                             self.isAuthenticated = false
                         } else {
                             // User is authenticated
                             self.isAuthenticated = true
-                            print("✅ Auto-login successful")
+                            print("Auto-login successful")
                         }
                     } else {
                         // No profile found - might be a new user or deleted profile
@@ -92,27 +92,27 @@ class AuthenticationManager: NSObject, ObservableObject {
         
         do {
             // Step 1: Get Spotify authorization code
-            print("🔐 Step 1: Getting Spotify auth code...")
+            print("[AuthenticationManager] Step 1: Getting Spotify auth code...")
             let authCode = try await getSpotifyAuthCode()
-            print("✅ Got auth code")
+            print("[AuthenticationManager] Got auth code")
             
             // Step 2: Exchange auth code for access token
-            print("🔐 Step 2: Exchanging code for tokens...")
+            print("[AuthenticationManager] Step 2: Exchanging code for tokens...")
             let tokens = try await exchangeCodeForTokens(authCode: authCode)
-            print("✅ Got tokens")
+            print("[AuthenticationManager] Got tokens")
             
             // Step 3: Get Spotify user profile
-            print("🔐 Step 3: Fetching Spotify profile...")
+            print("[AuthenticationManager] Step 3: Fetching Spotify profile...")
             let spotifyProfile = try await getSpotifyUserProfile(accessToken: tokens.accessToken)
-            print("✅ Got profile: \(spotifyProfile.displayName)")
+            print("[AuthenticationManager] Got profile: \(spotifyProfile.displayName)")
             
             // Step 4: Sign into Firebase with custom token or anonymous auth
-            print("🔐 Step 4: Signing into Firebase...")
+            print("[AuthenticationManager] Step 4: Signing into Firebase...")
             try await signIntoFirebase(spotifyUserId: spotifyProfile.id, spotifyAccessToken: tokens.accessToken)
-            print("✅ Signed into Firebase")
+            print("[AuthenticationManager] Signed into Firebase")
             
             // Step 5: Check if user needs to set username
-            print("🔐 Step 5: Checking for username...")
+            print("[AuthenticationManager] Step 5: Checking for username...")
             let existingUser = try? await loadUserProfile(firebaseUID: Auth.auth().currentUser?.uid ?? "")
             
             let user: AppUser
@@ -138,15 +138,15 @@ class AuthenticationManager: NSObject, ObservableObject {
                 
                 // Save basic profile (will be updated with username later)
                 await saveUserProfile(user: user)
-                print("⚠️ User needs to set username")
+                print("[AuthenticationManager] User needs to set username")
             }
             
             self.currentUser = user
             self.isAuthenticated = true
             self.isLoading = false
-            print("🎉 Login complete!")
+            print("[AuthenticationManager] Login complete!")
         } catch {
-            print("❌ Login failed: \(error)")
+            print("[AuthenticationManager] Login failed: \(error)")
             self.errorMessage = "Login failed: \(error.localizedDescription)"
             self.isLoading = false
         }
@@ -160,16 +160,16 @@ class AuthenticationManager: NSObject, ObservableObject {
         
         do {
             // Step 1: Create Firebase Auth user
-            print("🔐 Creating email/password user...")
+            print("[AuthenticationManager] Creating email/password user...")
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
-            print("✅ Created user with UID: \(result.user.uid)")
+            print("[AuthenticationManager] Created user with UID: \(result.user.uid)")
             
             // Send verification email
             do {
                 try await result.user.sendEmailVerification()
-                print("✅ Verification email sent to \(email)")
+                print("[AuthenticationManager] Verification email sent to \(email)")
             } catch {
-                print("⚠️ Failed to send verification email: \(error.localizedDescription)")
+                print("[AuthenticationManager] Failed to send verification email: \(error.localizedDescription)")
                 // Continue anyway - don't block signup if email fails
             }
             
@@ -190,15 +190,15 @@ class AuthenticationManager: NSObject, ObservableObject {
             )
             
             await saveUserProfile(user: user)
-            print("✅ User profile saved")
+            print("[AuthenticationManager] User profile saved")
             
             // Don't authenticate yet - they need to verify email first
             self.currentUser = nil
             self.isAuthenticated = false
             self.isLoading = false
-            print("⏳ Waiting for email verification")
+            print("[AuthenticationManager] Waiting for email verification")
         } catch {
-            print("❌ Signup failed: \(error)")
+            print("[AuthenticationManager] Signup failed: \(error)")
             self.errorMessage = "Signup failed: \(error.localizedDescription)"
             self.isLoading = false
         }
@@ -210,9 +210,9 @@ class AuthenticationManager: NSObject, ObservableObject {
         
         do {
             // Sign in with Firebase Auth
-            print("🔐 Signing in with email/password...")
+            print("[AuthenticationManager] Signing in with email/password...")
             let result = try await Auth.auth().signIn(withEmail: email, password: password)
-            print("✅ Signed in with UID: \(result.user.uid)")
+            print("[AuthenticationManager] Signed in with UID: \(result.user.uid)")
             
             // Check if email is verified
             if !result.user.isEmailVerified {
@@ -221,7 +221,7 @@ class AuthenticationManager: NSObject, ObservableObject {
                 self.isAuthenticated = false
                 self.isLoading = false
                 self.errorMessage = "Please verify your email address before signing in. Check your inbox for the verification link."
-                print("⚠️ Email not verified, blocking access")
+                print("[AuthenticationManager] Email not verified, blocking access")
                 return
             }
             
@@ -230,9 +230,9 @@ class AuthenticationManager: NSObject, ObservableObject {
             
             self.isAuthenticated = true
             self.isLoading = false
-            print("🎉 Login complete!")
+            print("[AuthenticationManager] Login complete!")
         } catch {
-            print("❌ Login failed: \(error)")
+            print("[AuthenticationManager] Login failed: \(error)")
             self.errorMessage = "Login failed: \(error.localizedDescription)"
             self.isLoading = false
         }
@@ -240,7 +240,7 @@ class AuthenticationManager: NSObject, ObservableObject {
     
     func resetPassword(email: String) async throws {
         try await Auth.auth().sendPasswordReset(withEmail: email)
-        print("✅ Password reset email sent to \(email)")
+        print("[AuthenticationManager] Password reset email sent to \(email)")
     }
     
     func resendVerificationEmail() async throws {
@@ -249,7 +249,7 @@ class AuthenticationManager: NSObject, ObservableObject {
         }
         
         try await user.sendEmailVerification()
-        print("✅ Verification email resent")
+        print("[AuthenticationManager] Verification email resent")
     }
     
     // MARK: - Username Management
@@ -286,7 +286,7 @@ class AuthenticationManager: NSObject, ObservableObject {
         
         // Update local state
         self.currentUser = user
-        print("✅ Username set: @\(username)")
+        print("[AuthenticationManager] Username set: @\(username)")
     }
     
     // MARK: - User Profile Management
@@ -298,16 +298,16 @@ class AuthenticationManager: NSObject, ObservableObject {
             let document = try await db.collection("users").document(firebaseUID).getDocument()
             
             guard let data = document.data() else {
-                print("⚠️ No user profile found for UID: \(firebaseUID)")
+                print("[AuthenticationManager] No user profile found for UID: \(firebaseUID)")
                 return nil
             }
             
             let user = try Firestore.Decoder().decode(AppUser.self, from: data)
             self.currentUser = user
-            print("✅ Loaded user profile: \(user.displayName)")
+            print("[AuthenticationManager] Loaded user profile: \(user.displayName)")
             return user
         } catch {
-            print("❌ Error loading user profile: \(error)")
+            print("[AuthenticationManager] Error loading user profile: \(error)")
             return nil
         }
     }
@@ -340,40 +340,40 @@ class AuthenticationManager: NSObject, ObservableObject {
                 callbackURLScheme: "resonance"
             ) { callbackURL, error in
                 if let error = error {
-                    print("❌ Auth session error: \(error.localizedDescription)")
+                    print("[AuthenticationManager] Auth session error: \(error.localizedDescription)")
                     continuation.resume(throwing: error)
                     return
                 }
                 
                 guard let callbackURL = callbackURL else {
-                    print("❌ No callback URL received")
+                    print("[AuthenticationManager] No callback URL received")
                     continuation.resume(throwing: AuthError.noAuthCode)
                     return
                 }
                 
-                print("✅ Callback URL: \(callbackURL.absoluteString)")
+                print("[AuthenticationManager] Callback URL: \(callbackURL.absoluteString)")
                 
                 guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
-                    print("❌ Failed to parse callback URL")
+                    print("[AuthenticationManager] Failed to parse callback URL")
                     continuation.resume(throwing: AuthError.noAuthCode)
                     return
                 }
                 
                 // Check for error in callback
                 if let error = components.queryItems?.first(where: { $0.name == "error" })?.value {
-                    print("❌ Spotify returned error: \(error)")
+                    print("[AuthenticationManager] Spotify returned error: \(error)")
                     continuation.resume(throwing: AuthError.spotifyAuthError(error))
                     return
                 }
                 
                 guard let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
-                    print("❌ No auth code in callback URL")
-                    print("Query items: \(components.queryItems ?? [])")
+                    print("[AuthenticationManager] No auth code in callback URL")
+                    print("[AuthenticationManager] Query items: \(components.queryItems ?? [])")
                     continuation.resume(throwing: AuthError.noAuthCode)
                     return
                 }
                 
-                print("✅ Got auth code: \(code.prefix(10))...")
+                print("[AuthenticationManager] Got auth code: \(code.prefix(10))...")
                 continuation.resume(returning: code)
             }
             
@@ -404,33 +404,33 @@ class AuthenticationManager: NSObject, ObservableObject {
         
         request.httpBody = bodyParams.data(using: .utf8)
         
-        print("🔄 Exchanging code for tokens...")
-        print("📤 Request URL: \(tokenURL)")
-        print("📤 Body params: grant_type=authorization_code&code=***&redirect_uri=\(SpotifyConfig.redirectURI)&client_id=\(SpotifyConfig.clientId)")
+        print("[AuthenticationManager] Exchanging code for tokens...")
+        print("[AuthenticationManager] Request URL: \(tokenURL)")
+        print("[AuthenticationManager] Body params: grant_type=authorization_code&code=***&redirect_uri=\(SpotifyConfig.redirectURI)&client_id=\(SpotifyConfig.clientId)")
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
-            print("❌ No HTTP response")
+            print("[AuthenticationManager] No HTTP response")
             throw AuthError.tokenExchangeFailed
         }
         
-        print("📥 Response status: \(httpResponse.statusCode)")
+        print("[AuthenticationManager] Response status: \(httpResponse.statusCode)")
         if let responseString = String(data: data, encoding: .utf8) {
-            print("📥 Response body: \(responseString)")
+            print("[AuthenticationManager] Response body: \(responseString)")
         }
         
         guard httpResponse.statusCode == 200 else {
-            print("❌ Token exchange failed with status \(httpResponse.statusCode)")
+            print("[AuthenticationManager] Token exchange failed with status \(httpResponse.statusCode)")
             throw AuthError.tokenExchangeFailed
         }
         
         do {
             let tokenResponse = try JSONDecoder().decode(SpotifyTokenResponse.self, from: data)
-            print("✅ Successfully decoded token response")
+            print("[AuthenticationManager] Successfully decoded token response")
             return tokenResponse
         } catch {
-            print("❌ Failed to decode token response: \(error)")
+            print("[AuthenticationManager] Failed to decode token response: \(error)")
             throw error
         }
     }
@@ -457,8 +457,8 @@ class AuthenticationManager: NSObject, ObservableObject {
         
         // Sign in to Firebase with custom token
         let result = try await Auth.auth().signIn(withCustomToken: firebaseToken)
-        print("✅ Signed into Firebase with custom token: \(result.user.uid)")
-        print("   Firebase UID will always be: \(spotifyUserId)")
+        print("[AuthenticationManager] Signed into Firebase with custom token: \(result.user.uid)")
+        print("[AuthenticationManager]    Firebase UID will always be: \(spotifyUserId)")
     }
     
     private func getFirebaseCustomToken(spotifyAccessToken: String) async throws -> String {
@@ -474,7 +474,7 @@ class AuthenticationManager: NSObject, ObservableObject {
         let body = ["spotifyAccessToken": spotifyAccessToken]
         request.httpBody = try JSONEncoder().encode(body)
         
-        print("🔄 Requesting custom Firebase token from backend...")
+        print("[AuthenticationManager] Requesting custom Firebase token from backend...")
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -482,16 +482,16 @@ class AuthenticationManager: NSObject, ObservableObject {
             throw AuthError.backendError("No HTTP response")
         }
         
-        print("📥 Backend response status: \(httpResponse.statusCode)")
+        print("[AuthenticationManager] Backend response status: \(httpResponse.statusCode)")
         
         guard httpResponse.statusCode == 200 else {
             let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-            print("❌ Backend error: \(errorMessage)")
+            print("[AuthenticationManager] Backend error: \(errorMessage)")
             throw AuthError.backendError(errorMessage)
         }
         
         let tokenResponse = try JSONDecoder().decode(FirebaseTokenResponse.self, from: data)
-        print("✅ Got Firebase custom token from backend")
+        print("[AuthenticationManager] Got Firebase custom token from backend")
         
         return tokenResponse.firebaseToken
     }
@@ -500,9 +500,9 @@ class AuthenticationManager: NSObject, ObservableObject {
         let db = Firestore.firestore()
         do {
             try db.collection("users").document(user.firebaseUID).setData(from: user)
-            print("✅ Saved user profile for: \(user.displayName)")
+            print("[AuthenticationManager] Saved user profile for: \(user.displayName)")
         } catch {
-            print("❌ Error saving user profile: \(error)")
+            print("[AuthenticationManager] Error saving user profile: \(error)")
         }
     }
     
