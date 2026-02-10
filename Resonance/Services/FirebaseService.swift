@@ -36,14 +36,14 @@ class FirebaseService: ObservableObject {
     func startListeningToAllRatings() {
         ratingsListener?.remove()
         
-        print("🔥 [FirebaseService] Starting ratings listener...")
+        print("[FirebaseService] Starting ratings listener...")
         
         ratingsListener = db.collection("ratings")
             .addSnapshotListener { [weak self] snapshot, error in
                 guard let self = self else { return }
                 
                 if let error = error {
-                    print("❌ [FirebaseService] Error listening to ratings: \(error.localizedDescription)")
+                    print("[FirebaseService] Error listening to ratings: \(error.localizedDescription)")
                     Task { @MainActor in
                         self.errorMessage = "Failed to fetch ratings: \(error.localizedDescription)"
                     }
@@ -51,18 +51,18 @@ class FirebaseService: ObservableObject {
                 }
                 
                 guard let documents = snapshot?.documents else {
-                    print("⚠️ [FirebaseService] No documents in snapshot")
+                    print("[FirebaseService] No documents in snapshot")
                     return
                 }
                 
-                print("📊 [FirebaseService] Received \(documents.count) rating documents from Firestore")
+                print("[FirebaseService] Received \(documents.count) rating documents from Firestore")
                 
                 Task { @MainActor in
                     self.allRatings = documents.compactMap { doc in
                         try? doc.data(as: UserRating.self)
                     }
-                    print("✅ [FirebaseService] Parsed \(self.allRatings.count) ratings successfully")
-                    print("📋 [FirebaseService] Sample ratings: \(self.allRatings.prefix(3).map { $0.name })")
+                    print("[FirebaseService] Parsed \(self.allRatings.count) ratings successfully")
+                    print("[FirebaseService] Sample ratings: \(self.allRatings.prefix(3).map { $0.name })")
                 }
             }
     }

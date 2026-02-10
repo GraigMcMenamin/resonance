@@ -196,35 +196,6 @@ struct ProfileView: View {
                     .foregroundColor(.white.opacity(0.5))
             }
             
-            // Rating Count
-            HStack(spacing: 20) {
-                VStack(spacing: 4) {
-                    Text("\(ratingsManager.ratings.count)")
-                        .font(.title3)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                    Text("Ratings")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                
-                if let avgRating = ratingsManager.averageRating() {
-                    Divider()
-                        .frame(height: 30)
-                        .background(Color.white.opacity(0.3))
-                    
-                    VStack(spacing: 4) {
-                        Text("\(Int(avgRating))%")
-                            .font(.title3)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                        Text("Avg. Rating")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                }
-            }
-            
             // Logout Button
             Button(action: {
                 authManager.logout()

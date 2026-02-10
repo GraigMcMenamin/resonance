@@ -13,7 +13,7 @@ struct LibraryView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var buddyManager: BuddyManager
     @State private var selectedFilter: RatingFilter = .all
-    @State private var selectedSection: LibrarySection = .myRatings
+    @State private var selectedSection: LibrarySection = .buddyReviews
     @State private var buddyRatings: [UserRating] = []
     @State private var buddyRecommendations: [MusicRecommendation] = []
     @State private var buddyFeedItems: [BuddyFeedItem] = []
@@ -24,8 +24,8 @@ struct LibraryView: View {
             VStack(spacing: 0) {
                 // Section Picker (My Ratings vs Buddy Ratings)
                 Picker("Section", selection: $selectedSection) {
-                    Text("my ratings").tag(LibrarySection.myRatings)
                     Text("buddy ratings").tag(LibrarySection.buddyReviews)
+                    Text("my ratings").tag(LibrarySection.myRatings)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
@@ -77,13 +77,6 @@ struct LibraryView: View {
             }
             .pickerStyle(.segmented)
             .padding()
-            
-            // Stats Card
-            if !filteredRatings.isEmpty {
-                StatsCard(ratings: filteredRatings, filter: selectedFilter)
-                    .padding(.horizontal)
-                    .padding(.bottom)
-            }
             
             // Ratings List
             if filteredRatings.isEmpty {
@@ -148,11 +141,6 @@ struct LibraryView: View {
                 }
                 .frame(maxHeight: .infinity)
             } else {
-                // Stats for buddy ratings
-                BuddyRatingsStatsCard(ratings: buddyRatings)
-                    .padding(.horizontal)
-                    .padding(.vertical)
-                
                 List {
                     ForEach(buddyFeedItems) { item in
                         switch item {

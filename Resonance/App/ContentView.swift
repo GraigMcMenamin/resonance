@@ -28,6 +28,9 @@ struct ContentView: View {
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
         
+        // Make tabs equal width
+        UITabBar.appearance().itemPositioning = .fill
+        
         // Set navigation bar appearance
         let navAppearance = UINavigationBarAppearance()
         navAppearance.configureWithOpaqueBackground()
@@ -93,7 +96,7 @@ struct AuthenticatedView: View {
                 
                 LibraryView()
                     .tabItem {
-                        Label("me & buddies", systemImage: "music.note.list")
+                        Label("buddies & me", systemImage: "music.note.list")
                     }
                 
                 ProfileView()

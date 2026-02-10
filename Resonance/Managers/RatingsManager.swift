@@ -21,21 +21,21 @@ class RatingsManager: ObservableObject {
     
     init(firebaseService: FirebaseService) {
         self.firebaseService = firebaseService
-        print("🎯 [RatingsManager] Initializing...")
+        print("[RatingsManager] Initializing...")
         setupFirebaseListener()
     }
     
     // MARK: - Setup
     
     private func setupFirebaseListener() {
-        print("🎧 [RatingsManager] Setting up Firebase listener...")
+        print("[RatingsManager] Setting up Firebase listener...")
         
         // Listen to all ratings from Firebase
         firebaseService.$allRatings
             .receive(on: DispatchQueue.main)
             .sink { [weak self] allRatings in
                 guard let self = self else { return }
-                print("📥 [RatingsManager] Received \(allRatings.count) ratings from FirebaseService")
+                print("[RatingsManager] Received \(allRatings.count) ratings from FirebaseService")
                 self.allRatings = allRatings
             }
             .store(in: &cancellables)
