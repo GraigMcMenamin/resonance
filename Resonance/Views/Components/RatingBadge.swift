@@ -281,65 +281,87 @@ struct BuddyRatingRow: View {
     }
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Buddy profile picture
-            if let imageURL = profileImageURL {
-                CustomAsyncImage(url: imageURL) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 32, height: 32)
-                            .clipShape(Circle())
-                    default:
-                        Circle()
-                            .fill(Color.white.opacity(0.1))
-                            .frame(width: 32, height: 32)
-                            .overlay(
-                                Image(systemName: "person.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.white.opacity(0.5))
-                            )
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                // Buddy profile picture
+                if let imageURL = profileImageURL {
+                    CustomAsyncImage(url: imageURL) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 32, height: 32)
+                                .clipShape(Circle())
+                        default:
+                            Circle()
+                                .fill(Color.white.opacity(0.1))
+                                .frame(width: 32, height: 32)
+                                .overlay(
+                                    Image(systemName: "person.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.white.opacity(0.5))
+                                )
+                        }
                     }
+                } else {
+                    Circle()
+                        .fill(Color.white.opacity(0.1))
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white.opacity(0.5))
+                        )
                 }
-            } else {
-                Circle()
-                    .fill(Color.white.opacity(0.1))
-                    .frame(width: 32, height: 32)
-                    .overlay(
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.5))
-                    )
-            }
-            
-            // Buddy username (with @ prefix if it's a username)
-            Text(displayUsername)
-                .font(.subheadline)
-                .foregroundColor(.white)
-                .lineLimit(1)
-            
-            Spacer()
-            
-            // Rating with bar
-            HStack(spacing: 8) {
-                Text("\(rating.percentage)%")
-                    .font(.subheadline)
-                    .fontWeight(.bold)
-                    .foregroundColor(ratingColor)
                 
-                RatingBarMini(percentage: Double(rating.percentage))
-                    .frame(width: 50, height: 6)
+                // Buddy username (with @ prefix if it's a username)
+                Text(displayUsername)
+                    .font(.subheadline)
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                
+                Spacer()
+                
+                // Rating with bar
+                HStack(spacing: 8) {
+                    Text("\(rating.percentage)%")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(ratingColor)
+                    
+                    RatingBarMini(percentage: Double(rating.percentage))
+                        .frame(width: 50, height: 6)
+                }
+                
+                // Chevron to indicate tappable
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.3))
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             
-            // Chevron to indicate tappable
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.3))
+            // Review content if it exists and is SHORT (< 150 characters)
+            if rating.hasReviewContent, 
+               let reviewContent = rating.reviewContent,
+               rating.reviewLength == .short {
+                VStack(alignment: .leading, spacing: 4) {
+                    Divider()
+                        .background(Color.white.opacity(0.1))
+                        .padding(.horizontal, 12)
+                    
+                    Text(reviewContent)
+                        .font(.footnote)
+                        .foregroundColor(.white.opacity(0.8))
+                        .lineLimit(4)
+                        .multilineTextAlignment(.leading)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 6)
+                        .padding(.bottom, 10)
+                }
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color.white.opacity(0.05))
