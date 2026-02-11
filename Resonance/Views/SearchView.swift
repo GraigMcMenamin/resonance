@@ -172,6 +172,23 @@ struct ArtistListView: View {
     let userId: String?
     
     var body: some View {
+        if artists.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "music.mic")
+                    .font(.system(size: 60))
+                    .foregroundColor(.gray)
+                Text("search for artists")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding()
+        } else {
+            artistList
+        }
+    }
+    
+    private var artistList: some View {
         List(artists) { artist in
             NavigationLink(destination: ArtistDetailView(
                 artistId: artist.id,
@@ -246,6 +263,23 @@ struct AlbumListView: View {
     let userId: String?
     
     var body: some View {
+        if albums.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "square.stack")
+                    .font(.system(size: 60))
+                    .foregroundColor(.gray)
+                Text("search for albums")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding()
+        } else {
+            albumList
+        }
+    }
+    
+    private var albumList: some View {
         List(albums) { album in
             NavigationLink(destination: AlbumDetailView(
                 albumId: album.id,
@@ -325,6 +359,23 @@ struct TrackListView: View {
     let userId: String?
     
     var body: some View {
+        if tracks.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "music.note")
+                    .font(.system(size: 60))
+                    .foregroundColor(.gray)
+                Text("search for songs")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding()
+        } else {
+            trackList
+        }
+    }
+    
+    private var trackList: some View {
         List(tracks) { track in
             NavigationLink(destination: SongDetailView(
                 trackId: track.id,
@@ -408,14 +459,26 @@ struct AllResultsView: View {
     let userId: String?
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                tracksSection
-                artistsSection
-                albumsSection
-                emptyStateView
+        if artists.isEmpty && albums.isEmpty && tracks.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 60))
+                    .foregroundColor(.gray)
+                Text("try searching for songs, artists, albums, or your friends")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
             }
-            .padding(.vertical)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding()
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    tracksSection
+                    artistsSection
+                    albumsSection
+                }
+                .padding(.vertical)
+            }
         }
     }
     
@@ -452,22 +515,6 @@ struct AllResultsView: View {
                     trackRow(track: track)
                 }
             }
-        }
-    }
-    
-    @ViewBuilder
-    private var emptyStateView: some View {
-        if artists.isEmpty && albums.isEmpty && tracks.isEmpty {
-            VStack(spacing: 12) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 60))
-                    .foregroundColor(.gray)
-                Text("try searching for songs, artists, albums, or your friends")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding()
         }
     }
     
@@ -640,10 +687,7 @@ struct UserListView: View {
                 Image(systemName: "person.2.fill")
                     .font(.system(size: 60))
                     .foregroundColor(.gray)
-                Text("no users found")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                Text("try searching by username")
+                Text("search for users")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
