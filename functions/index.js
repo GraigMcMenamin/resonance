@@ -142,9 +142,9 @@ exports.onRecommendationCreated = onDocumentCreated(
       const senderName = senderUsername || senderDisplayName || "Someone";
       const itemTypeLabel = itemType === "track" ? "song" : itemType;
       
-      let notificationBody = `${senderName} sent you a ${itemTypeLabel}: ${itemName}`;
+      let notificationBody = `${senderName} sent you a ${itemTypeLabel} "${itemName}"`;
       if (message) {
-        notificationBody += ` - "${message}"`;
+        notificationBody += ` and said: ${message}`;
       }
 
       // Send notification to all of user's devices
