@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1A8524552F1B0D3700A68F3D /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 1A8524542F1B0D3700A68F3D /* FirebaseAuth */; };
 		1A8524572F1B0D3700A68F3D /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 1A8524562F1B0D3700A68F3D /* FirebaseFirestore */; };
+		1A8524592F1B0D3700A68F3D /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 1A8524582F1B0D3700A68F3D /* FirebaseMessaging */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -43,6 +44,7 @@
 			files = (
 				1A8524552F1B0D3700A68F3D /* FirebaseAuth in Frameworks */,
 				1A8524572F1B0D3700A68F3D /* FirebaseFirestore in Frameworks */,
+				1A8524592F1B0D3700A68F3D /* FirebaseMessaging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -274,6 +276,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Resonance/Resonance.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -309,6 +312,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Resonance/Resonance.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -383,6 +387,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 1A8524532F1B0D3700A68F3D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		1A8524582F1B0D3700A68F3D /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1A8524532F1B0D3700A68F3D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

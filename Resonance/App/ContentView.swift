@@ -11,6 +11,7 @@ struct ContentView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var spotifyService: SpotifyService
+    @EnvironmentObject var notificationManager: NotificationManager
     
     init() {
         let appearance = UITabBarAppearance()
@@ -63,6 +64,14 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onChange(of: authManager.currentUser?.id) { oldValue, newValue in
+            // Update notification manager with user ID
+            notificationManager.setUserId(newValue)
+        }
+        .onAppear {
+            // Set initial user ID
+            notificationManager.setUserId(authManager.currentUser?.id)
+        }
     }
 }
 
