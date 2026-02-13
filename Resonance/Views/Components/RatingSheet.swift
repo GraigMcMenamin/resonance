@@ -165,10 +165,6 @@ struct RatingSheet: View {
                 .font(.system(size: 50, weight: .bold, design: .rounded))
                 .foregroundColor(percentageColor)
             
-            Text(ratingLabel)
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.7))
-            
             // Average Rating
             if let average = communityAverage, ratingCount > 0 {
                 HStack(spacing: 4) {
@@ -430,21 +426,6 @@ struct RatingSheet: View {
             return Color(red: 0.6, green: 0.8, blue: 0.2)
         default:
             return .green
-        }
-    }
-    
-    private var ratingLabel: String {
-        switch percentage {
-        case 0..<40:
-            return "Poor"
-        case 40..<60:
-            return "Average"
-        case 60..<75:
-            return "Good"
-        case 75..<90:
-            return "Great"
-        default:
-            return "Masterpiece"
         }
     }
     
