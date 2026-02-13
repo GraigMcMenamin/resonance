@@ -29,16 +29,28 @@ class FirebaseService: ObservableObject {
     
     private var ratingsListener: ListenerRegistration?
     
+    // Caching infrastructure
+    private var ratingsCache: [String: [UserRating]] = [:] // keyed by userId
+    private var cacheTimestamp: [String: Date] = [:]
+    private let cacheTimeout: TimeInterval = 300 // 5 minutes
+    
+    // Pagination support
+    private var lastDocuments: [String: DocumentSnapshot] = [:] // keyed by query identifier
+    
     nonisolated init() {}
     
     // MARK: - Real-time Listeners
     
+    /// Listen to all ratings - needed for charts and community features
+    /// Uses a reasonable limit to prevent downloading unbounded data
     func startListeningToAllRatings() {
         ratingsListener?.remove()
         
-        print("[FirebaseService] Starting ratings listener...")
+        print("[FirebaseService] Starting ratings listener (limited)...")
         
         ratingsListener = db.collection("ratings")
+            .order(by: "dateRated", descending: true)
+            .limit(to: 500) // Cap at 500 most recent ratings for efficiency
             .addSnapshotListener { [weak self] snapshot, error in
                 guard let self = self else { return }
                 
@@ -62,7 +74,87 @@ class FirebaseService: ObservableObject {
                         try? doc.data(as: UserRating.self)
                     }
                     print("[FirebaseService] Parsed \(self.allRatings.count) ratings successfully")
-                    print("[FirebaseService] Sample ratings: \(self.allRatings.prefix(3).map { $0.name })")
+                }
+            }
+    }
+    
+    /// Listen to ratings from a specific user (more efficient than loading all ratings)
+    func startListeningToUserRatings(userId: String) {
+        ratingsListener?.remove()
+        
+        print("[FirebaseService] Starting ratings listener for user: \(userId)")
+        
+        ratingsListener = db.collection("ratings")
+            .whereField("userId", isEqualTo: userId)
+            .order(by: "dateRated", descending: true)
+            .limit(to: 100) // Reasonable limit
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    print("[FirebaseService] Error listening to ratings: \(error.localizedDescription)")
+                    Task { @MainActor in
+                        self.errorMessage = "Failed to fetch ratings: \(error.localizedDescription)"
+                    }
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    print("[FirebaseService] No documents in snapshot")
+                    return
+                }
+                
+                print("[FirebaseService] Received \(documents.count) rating documents from Firestore")
+                
+                Task { @MainActor in
+                    let ratings = documents.compactMap { doc in
+                        try? doc.data(as: UserRating.self)
+                    }
+                    // Update cache
+                    self.ratingsCache[userId] = ratings
+                    self.cacheTimestamp[userId] = Date()
+                    self.allRatings = ratings
+                    print("[FirebaseService] Parsed \(ratings.count) ratings successfully")
+                }
+            }
+    }
+    
+    /// Listen to ratings from user's buddies (more efficient for feed views)
+    func startListeningToBuddyRatings(buddyIds: [String], limit: Int = 50) {
+        ratingsListener?.remove()
+        
+        guard !buddyIds.isEmpty else {
+            print("[FirebaseService] No buddies to listen to")
+            return
+        }
+        
+        print("[FirebaseService] Starting ratings listener for \(buddyIds.count) buddies")
+        
+        // Firestore 'in' queries support up to 10 items
+        let limitedBuddyIds = Array(buddyIds.prefix(10))
+        
+        ratingsListener = db.collection("ratings")
+            .whereField("userId", in: limitedBuddyIds)
+            .order(by: "dateRated", descending: true)
+            .limit(to: limit)
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    print("[FirebaseService] Error listening to buddy ratings: \(error.localizedDescription)")
+                    Task { @MainActor in
+                        self.errorMessage = "Failed to fetch ratings: \(error.localizedDescription)"
+                    }
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else { return }
+                
+                Task { @MainActor in
+                    self.allRatings = documents.compactMap { doc in
+                        try? doc.data(as: UserRating.self)
+                    }
+                    print("[FirebaseService] Loaded \(self.allRatings.count) buddy ratings")
                 }
             }
     }
@@ -96,15 +188,37 @@ class FirebaseService: ObservableObject {
     
     // MARK: - Fetch Ratings by Criteria
     
-    func fetchUserRatings(userId: String) async throws -> [UserRating] {
-        let snapshot = try await db.collection("ratings")
+    func fetchUserRatings(userId: String, limit: Int = 50, startAfter lastDoc: DocumentSnapshot? = nil) async throws -> (ratings: [UserRating], lastDocument: DocumentSnapshot?) {
+        // Check cache first
+        if let cached = ratingsCache[userId],
+           let cacheTime = cacheTimestamp[userId],
+           Date().timeIntervalSince(cacheTime) < cacheTimeout,
+           lastDoc == nil { // Only use cache for first page
+            print("[FirebaseService] Using cached ratings for user \(userId)")
+            return (cached, nil)
+        }
+        
+        var query = db.collection("ratings")
             .whereField("userId", isEqualTo: userId)
             .order(by: "dateRated", descending: true)
-            .getDocuments()
+            .limit(to: limit)
         
-        return snapshot.documents.compactMap { doc in
+        if let lastDoc = lastDoc {
+            query = query.start(afterDocument: lastDoc)
+        }
+        
+        let snapshot = try await query.getDocuments()
+        let ratings = snapshot.documents.compactMap { doc in
             try? doc.data(as: UserRating.self)
         }
+        
+        // Update cache for first page
+        if lastDoc == nil {
+            ratingsCache[userId] = ratings
+            cacheTimestamp[userId] = Date()
+        }
+        
+        return (ratings, snapshot.documents.last)
     }
     
     func fetchRatingsForItem(spotifyId: String) async throws -> [UserRating] {
@@ -402,39 +516,38 @@ class FirebaseService: ObservableObject {
     }
     
     func checkBuddyStatus(userId: String, otherUserId: String) async throws -> BuddyStatus {
-        // Check if already buddies
-        let buddyDoc = try await db.collection("users")
+        // Use batch read for efficiency - check all 3 documents in parallel
+        let sentRequestId = BuddyRequest.makeId(fromUserId: userId, toUserId: otherUserId)
+        let receivedRequestId = BuddyRequest.makeId(fromUserId: otherUserId, toUserId: userId)
+        
+        async let buddyDocFetch = db.collection("users")
             .document(userId)
             .collection("buddies")
             .document(otherUserId)
             .getDocument()
         
+        async let sentRequestDocFetch = db.collection("buddyRequests")
+            .document(sentRequestId)
+            .getDocument()
+        
+        async let receivedRequestDocFetch = db.collection("buddyRequests")
+            .document(receivedRequestId)
+            .getDocument()
+        
+        let (buddyDoc, sentRequestDoc, receivedRequestDoc) = try await (buddyDocFetch, sentRequestDocFetch, receivedRequestDocFetch)
+        
         if buddyDoc.exists {
             return .buddies
         }
         
-        // Check if there's a pending request from current user
-        let sentRequestId = BuddyRequest.makeId(fromUserId: userId, toUserId: otherUserId)
-        let sentRequestDoc = try await db.collection("buddyRequests")
-            .document(sentRequestId)
-            .getDocument()
-        
-        if let sentRequest = try? sentRequestDoc.data(as: BuddyRequest.self) {
-            if sentRequest.status == .pending {
-                return .requestSent
-            }
+        if let sentRequest = try? sentRequestDoc.data(as: BuddyRequest.self),
+           sentRequest.status == .pending {
+            return .requestSent
         }
         
-        // Check if there's a pending request from other user
-        let receivedRequestId = BuddyRequest.makeId(fromUserId: otherUserId, toUserId: userId)
-        let receivedRequestDoc = try await db.collection("buddyRequests")
-            .document(receivedRequestId)
-            .getDocument()
-        
-        if let receivedRequest = try? receivedRequestDoc.data(as: BuddyRequest.self) {
-            if receivedRequest.status == .pending {
-                return .requestReceived
-            }
+        if let receivedRequest = try? receivedRequestDoc.data(as: BuddyRequest.self),
+           receivedRequest.status == .pending {
+            return .requestReceived
         }
         
         return .notBuddies
@@ -622,12 +735,23 @@ class FirebaseService: ObservableObject {
     }
     
     func getReviewLikesCount(reviewId: String) async throws -> Int {
-        let snapshot = try await db.collection("ratings")
+        // First try to get from the cached count field
+        let ratingDoc = try await db.collection("ratings")
+            .document(reviewId)
+            .getDocument()
+        
+        if let rating = try? ratingDoc.data(as: UserRating.self),
+           let likesCount = rating.likesCount {
+            return likesCount
+        }
+        
+        // Fallback to count aggregation query
+        let query = db.collection("ratings")
             .document(reviewId)
             .collection("likes")
-            .getDocuments()
         
-        return snapshot.documents.count
+        let snapshot = try await query.count.getAggregation(source: .server)
+        return Int(snapshot.count.intValue)
     }
     
     func getReviewLikes(reviewId: String) async throws -> [ReviewLike] {
@@ -686,12 +810,23 @@ class FirebaseService: ObservableObject {
     }
     
     func getReviewCommentsCount(reviewId: String) async throws -> Int {
-        let snapshot = try await db.collection("ratings")
+        // First try to get from the cached count field
+        let ratingDoc = try await db.collection("ratings")
+            .document(reviewId)
+            .getDocument()
+        
+        if let rating = try? ratingDoc.data(as: UserRating.self),
+           let commentsCount = rating.commentsCount {
+            return commentsCount
+        }
+        
+        // Fallback to count aggregation query
+        let query = db.collection("ratings")
             .document(reviewId)
             .collection("comments")
-            .getDocuments()
         
-        return snapshot.documents.count
+        let snapshot = try await query.count.getAggregation(source: .server)
+        return Int(snapshot.count.intValue)
     }
     
     // MARK: - Comment Like Operations (stored under ratings collection)
@@ -741,14 +876,27 @@ class FirebaseService: ObservableObject {
     }
     
     func getCommentLikesCount(reviewId: String, commentId: String) async throws -> Int {
-        let snapshot = try await db.collection("ratings")
+        // First try to get from the cached count field
+        let commentDoc = try await db.collection("ratings")
+            .document(reviewId)
+            .collection("comments")
+            .document(commentId)
+            .getDocument()
+        
+        if let comment = try? commentDoc.data(as: ReviewComment.self),
+           let likesCount = comment.likesCount {
+            return likesCount
+        }
+        
+        // Fallback to count aggregation query
+        let query = db.collection("ratings")
             .document(reviewId)
             .collection("comments")
             .document(commentId)
             .collection("likes")
-            .getDocuments()
         
-        return snapshot.documents.count
+        let snapshot = try await query.count.getAggregation(source: .server)
+        return Int(snapshot.count.intValue)
     }
     
     // MARK: - Music Recommendation Operations

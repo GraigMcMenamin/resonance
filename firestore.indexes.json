@@ -38,6 +38,20 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "ratings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateRated",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "buddyRequests",
       "queryScope": "COLLECTION",
       "fields": [
@@ -47,6 +61,20 @@
         },
         {
           "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "buddyRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "fromUserId",
           "order": "ASCENDING"
         },
         {
@@ -104,34 +132,6 @@
         {
           "fieldPath": "senderId",
           "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "sentAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "recommendations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "senderId",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "sentAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "recommendations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "receiverId",
-          "arrayConfig": "CONTAINS"
         },
         {
           "fieldPath": "sentAt",

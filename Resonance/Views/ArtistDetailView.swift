@@ -12,7 +12,7 @@ struct ArtistDetailView: View {
     let artistName: String
     let artistImageURL: URL?
     
-    @StateObject private var spotifyService = SpotifyService()
+    @EnvironmentObject var spotifyService: SpotifyService
     @EnvironmentObject var ratingsManager: RatingsManager
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
@@ -77,6 +77,22 @@ struct ArtistDetailView: View {
         }
         .navigationTitle(artistName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    if let uri = SpotifyService.spotifyURI(type: "artist", id: artistId),
+                       UIApplication.shared.canOpenURL(uri) {
+                        UIApplication.shared.open(uri)
+                    } else if let webURL = SpotifyService.spotifyWebURL(type: "artist", id: artistId) {
+                        UIApplication.shared.open(webURL)
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.right.circle")
+                        .foregroundColor(.green)
+                }
+                .accessibilityLabel("Open in Spotify")
+            }
+        }
         .sheet(item: $selectedItem) { item in
             RatingSheet(item: item, ratingsManager: ratingsManager)
                 .environmentObject(authManager)
@@ -95,7 +111,9 @@ struct ArtistDetailView: View {
             .environmentObject(buddyManager)
         }
         .task {
-            await spotifyService.authenticate()
+            if !spotifyService.isAuthenticated {
+                await spotifyService.authenticate()
+            }
             await loadArtistData()
             await loadBuddyRatings()
         }

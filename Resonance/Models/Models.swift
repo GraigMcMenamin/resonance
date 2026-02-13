@@ -245,17 +245,31 @@ struct SpotifyUserProfile: Codable {
 
 struct SpotifyTokenResponse: Codable {
     let accessToken: String
-    let tokenType: String
+    let tokenType: String?
     let expiresIn: Int
     let refreshToken: String?
     let scope: String?
     
-    enum CodingKeys: String, CodingKey {
-        case accessToken = "access_token"
-        case tokenType = "token_type"
-        case expiresIn = "expires_in"
-        case refreshToken = "refresh_token"
-        case scope
+    // Supports both Spotify's snake_case and our Cloud Function's camelCase
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FlexibleCodingKey.self)
+        
+        accessToken = try container.decodeIfPresent(String.self, forKey: FlexibleCodingKey(stringValue: "accessToken")!)
+            ?? container.decode(String.self, forKey: FlexibleCodingKey(stringValue: "access_token")!)
+        tokenType = try container.decodeIfPresent(String.self, forKey: FlexibleCodingKey(stringValue: "tokenType")!)
+            ?? container.decodeIfPresent(String.self, forKey: FlexibleCodingKey(stringValue: "token_type")!)
+        expiresIn = try container.decodeIfPresent(Int.self, forKey: FlexibleCodingKey(stringValue: "expiresIn")!)
+            ?? container.decode(Int.self, forKey: FlexibleCodingKey(stringValue: "expires_in")!)
+        refreshToken = try container.decodeIfPresent(String.self, forKey: FlexibleCodingKey(stringValue: "refreshToken")!)
+            ?? container.decodeIfPresent(String.self, forKey: FlexibleCodingKey(stringValue: "refresh_token")!)
+        scope = try container.decodeIfPresent(String.self, forKey: FlexibleCodingKey(stringValue: "scope")!)
+    }
+    
+    private struct FlexibleCodingKey: CodingKey {
+        var stringValue: String
+        var intValue: Int?
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { self.intValue = intValue; self.stringValue = "\(intValue)" }
     }
 }
 
@@ -278,6 +292,10 @@ struct UserRating: Codable, Identifiable, Equatable {
     var reviewContent: String?
     var reviewDateCreated: Date?
     var reviewDateUpdated: Date?
+    
+    // Aggregated counts (maintained by Cloud Functions)
+    var likesCount: Int?
+    var commentsCount: Int?
     
     enum RatingType: String, Codable {
         case artist
@@ -434,6 +452,9 @@ struct ReviewComment: Codable, Identifiable, Equatable {
     let content: String // The comment text (max 100 characters)
     let createdAt: Date
     var updatedAt: Date?
+    
+    // Aggregated count (maintained by Cloud Functions)
+    var likesCount: Int?
     
     static func == (lhs: ReviewComment, rhs: ReviewComment) -> Bool {
         lhs.id == rhs.id &&

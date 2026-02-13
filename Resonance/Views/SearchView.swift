@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct SearchView: View {
-    @StateObject private var spotifyService = SpotifyService()
+    @EnvironmentObject var spotifyService: SpotifyService
     @EnvironmentObject var ratingsManager: RatingsManager
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
@@ -21,6 +21,7 @@ struct SearchView: View {
     @State private var users: [AppUser] = []
     @State private var isLoading = false
     @State private var selectedItem: RatableItem?
+    @State private var searchTask: Task<Void, Never>?
     
     enum SearchTab: Int {
         case songs = 0
@@ -92,7 +93,9 @@ struct SearchView: View {
                 performSearch()
             }
             .task {
-                await spotifyService.authenticate()
+                if !spotifyService.isAuthenticated {
+                    await spotifyService.authenticate()
+                }
             }
         }
     }
@@ -100,34 +103,54 @@ struct SearchView: View {
     private func performSearch() {
         guard !searchText.isEmpty else { return }
         
-        isLoading = true
+        // Cancel any in-flight search
+        searchTask?.cancel()
         
-        Task {
+        // Debounce: wait 400ms before executing
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            
+            await MainActor.run { isLoading = true }
+            
             do {
                 switch selectedTab {
                 case 0: // Songs
-                    tracks = try await spotifyService.searchTracks(query: searchText)
+                    let result = try await spotifyService.searchTracks(query: searchText)
+                    guard !Task.isCancelled else { return }
+                    tracks = result
                 case 1: // Artists
-                    artists = try await spotifyService.searchArtists(query: searchText)
+                    let result = try await spotifyService.searchArtists(query: searchText)
+                    guard !Task.isCancelled else { return }
+                    artists = result
                 case 2: // Albums
-                    albums = try await spotifyService.searchAlbums(query: searchText)
+                    let result = try await spotifyService.searchAlbums(query: searchText)
+                    guard !Task.isCancelled else { return }
+                    albums = result
                 case 3: // Users
-                    users = try await firebaseService.searchUsers(query: searchText)
+                    let result = try await firebaseService.searchUsers(query: searchText)
+                    guard !Task.isCancelled else { return }
+                    users = result
                 case 4: // All
                     async let artistsResult = spotifyService.searchArtists(query: searchText)
                     async let albumsResult = spotifyService.searchAlbums(query: searchText)
                     async let tracksResult = spotifyService.searchTracks(query: searchText)
                     
-                    artists = try await artistsResult
-                    albums = try await albumsResult
-                    tracks = try await tracksResult
+                    let (a, al, t) = try await (artistsResult, albumsResult, tracksResult)
+                    guard !Task.isCancelled else { return }
+                    artists = a
+                    albums = al
+                    tracks = t
                 default:
                     break
                 }
             } catch {
-                print("search failed: \(error)")
+                if !Task.isCancelled {
+                    print("search failed: \(error)")
+                }
             }
-            isLoading = false
+            
+            await MainActor.run { isLoading = false }
         }
     }
 }

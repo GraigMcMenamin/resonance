@@ -13,6 +13,7 @@ struct ProfileView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var buddyManager: BuddyManager
+    @EnvironmentObject var spotifyService: SpotifyService
     @StateObject private var viewModel = ProfileViewModel()
     @State private var selectedPickerType: TopItemType?
     
@@ -69,6 +70,7 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .sheet(item: $selectedPickerType) { type in
                 TopItemPicker(viewModel: viewModel, itemType: type)
+                    .environmentObject(spotifyService)
             }
             .onAppear {
                 viewModel.initialize(firebaseService: firebaseService)
@@ -648,7 +650,7 @@ struct TopItemPicker: View {
     @State private var searchResults: [TopItem] = []
     @State private var isSearching = false
     @State private var isAuthenticating = true
-    @StateObject private var spotifyService = SpotifyService()
+    @EnvironmentObject var spotifyService: SpotifyService
     
     var selectedItems: [TopItem] {
         switch itemType {
@@ -767,7 +769,9 @@ struct TopItemPicker: View {
             }
         }
         .task {
-            await spotifyService.authenticate()
+            if !spotifyService.isAuthenticated {
+                await spotifyService.authenticate()
+            }
             isAuthenticating = false
         }
     }

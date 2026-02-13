@@ -386,25 +386,21 @@ class AuthenticationManager: NSObject, ObservableObject {
     }
     
     private func exchangeCodeForTokens(authCode: String) async throws -> SpotifyTokenResponse {
-        let tokenURL = URL(string: "https://accounts.spotify.com/api/token")!
+        guard let url = URL(string: "\(SpotifyConfig.cloudFunctionBaseURL)/exchangeSpotifyCode") else {
+            throw AuthError.tokenExchangeFailed
+        }
         
-        var request = URLRequest(url: tokenURL)
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let bodyParams = [
-            "grant_type=authorization_code",
-            "code=\(authCode)",
-            "redirect_uri=\(SpotifyConfig.redirectURI)",
-            "client_id=\(SpotifyConfig.clientId)",
-            "client_secret=\(SpotifyConfig.clientSecret)"
-        ].joined(separator: "&")
+        let body: [String: String] = [
+            "code": authCode,
+            "redirectUri": SpotifyConfig.redirectURI
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
-        request.httpBody = bodyParams.data(using: .utf8)
-        
-        print("[AuthenticationManager] Exchanging code for tokens...")
-        print("[AuthenticationManager] Request URL: \(tokenURL)")
-        print("[AuthenticationManager] Body params: grant_type=authorization_code&code=***&redirect_uri=\(SpotifyConfig.redirectURI)&client_id=\(SpotifyConfig.clientId)")
+        print("[AuthenticationManager] Exchanging code for tokens via Cloud Function...")
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -414,12 +410,11 @@ class AuthenticationManager: NSObject, ObservableObject {
         }
         
         print("[AuthenticationManager] Response status: \(httpResponse.statusCode)")
-        if let responseString = String(data: data, encoding: .utf8) {
-            print("[AuthenticationManager] Response body: \(responseString)")
-        }
         
         guard httpResponse.statusCode == 200 else {
-            print("[AuthenticationManager] Token exchange failed with status \(httpResponse.statusCode)")
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("[AuthenticationManager] Token exchange failed: \(responseString)")
+            }
             throw AuthError.tokenExchangeFailed
         }
         
@@ -544,20 +539,16 @@ class AuthenticationManager: NSObject, ObservableObject {
     }
     
     private func refreshSpotifyToken(refreshToken: String) async throws -> SpotifyTokenResponse {
-        let tokenURL = URL(string: "https://accounts.spotify.com/api/token")!
+        guard let url = URL(string: "\(SpotifyConfig.cloudFunctionBaseURL)/refreshSpotifyToken") else {
+            throw AuthError.tokenRefreshFailed
+        }
         
-        var request = URLRequest(url: tokenURL)
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let bodyParams = [
-            "grant_type=refresh_token",
-            "refresh_token=\(refreshToken)",
-            "client_id=\(SpotifyConfig.clientId)",
-            "client_secret=\(SpotifyConfig.clientSecret)"
-        ].joined(separator: "&")
-        
-        request.httpBody = bodyParams.data(using: .utf8)
+        let body: [String: String] = ["refreshToken": refreshToken]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
         let (data, response) = try await URLSession.shared.data(for: request)
         

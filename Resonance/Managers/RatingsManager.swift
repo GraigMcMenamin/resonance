@@ -83,7 +83,7 @@ class RatingsManager: ObservableObject {
         isLoading = true
         currentUserId = userId
         do {
-            let userRatings = try await firebaseService.fetchUserRatings(userId: userId)
+            let (userRatings, _) = try await firebaseService.fetchUserRatings(userId: userId)
             self.ratings = userRatings
             isLoading = false
         } catch {
