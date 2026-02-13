@@ -87,10 +87,15 @@ struct ArtistDetailView: View {
                         UIApplication.shared.open(webURL)
                     }
                 } label: {
-                    Image(systemName: "arrow.up.right.circle")
-                        .foregroundColor(.green)
+                    HStack(spacing: 4) {
+                        Text("open in spotify")
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                        Image(systemName: "arrow.up.right.circle")
+                            .foregroundColor(.green)
+                            .imageScale(.small)
+                    }
                 }
-                .accessibilityLabel("Open in Spotify")
             }
         }
         .sheet(item: $selectedItem) { item in

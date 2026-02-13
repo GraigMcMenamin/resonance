@@ -61,9 +61,6 @@ struct SongDetailView: View {
                         // Rating Section
                         ratingSection
                         
-                        // Artists Section
-                        artistsSection
-                        
                         // Album Section
                         albumSection
                         
@@ -86,10 +83,15 @@ struct SongDetailView: View {
                         UIApplication.shared.open(webURL)
                     }
                 } label: {
-                    Image(systemName: "arrow.up.right.circle")
-                        .foregroundColor(.green)
+                    HStack(spacing: 4) {
+                        Text("open in spotify")
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                        Image(systemName: "arrow.up.right.circle")
+                            .foregroundColor(.green)
+                            .imageScale(.small)
+                    }
                 }
-                .accessibilityLabel("Open in Spotify")
             }
         }
         .sheet(item: $selectedItem) { item in
@@ -167,6 +169,38 @@ struct SongDetailView: View {
                 .fontWeight(.bold)
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
+            
+            // Artists
+            if let artists = track?.artists {
+                VStack(spacing: 8) {
+                    ForEach(artists, id: \.id) { artist in
+                        NavigationLink(destination: ArtistDetailView(
+                            artistId: artist.id,
+                            artistName: artist.name,
+                            artistImageURL: nil
+                        )) {
+                            HStack(spacing: 6) {
+                                Text(artist.name)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white.opacity(0.8))
+                                
+                                if let average = ratingsManager.getAverageRating(for: artist.id) {
+                                    Text("\(Int(average))%")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.5))
+                                }
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundColor(.white.opacity(0.4))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 8)
+            }
         }
         .padding(.top, 20)
         .padding(.horizontal)
@@ -306,67 +340,6 @@ struct SongDetailView: View {
         buddyRatings = ratingsManager.getBuddyRatings(for: trackId, buddyIds: buddyIds)
     }
     
-    // MARK: - Artists Section
-    
-    private var artistsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header row with column labels
-            HStack {
-                Text(track?.artists.count ?? 1 > 1 ? "artists" : "artist")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                
-                Spacer()
-                
-                // Column headers for ratings
-                HStack(spacing: 10) {
-                    Text("your %")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                    
-                    Text("avg %")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                        .frame(width: 50, alignment: .trailing)
-                }
-                .padding(.trailing, 20) // Account for chevron
-            }
-            
-            if let artists = track?.artists {
-                ForEach(artists, id: \.id) { artist in
-                    NavigationLink(destination: ArtistDetailView(
-                        artistId: artist.id,
-                        artistName: artist.name,
-                        artistImageURL: nil
-                    )) {
-                        HStack(spacing: 12) {
-                            Text(artist.name)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.white)
-                            
-                            Spacer()
-                            
-                            RatingBadgeCompact(spotifyId: artist.id, ratingsManager: ratingsManager, userId: authManager.currentUser?.id)
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.3))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.white.opacity(0.03))
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .padding(.horizontal)
-    }
     
     // MARK: - Album Section
     
