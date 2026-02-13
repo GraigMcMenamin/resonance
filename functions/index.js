@@ -141,7 +141,10 @@ exports.onRecommendationCreated = onDocumentCreated(
       const senderName = senderUsername || "Someone";
       const itemTypeLabel = itemType === "track" ? "song" : itemType;
       
-      let notificationBody = `${senderName} sent you a ${itemTypeLabel} "${itemName}"`;
+      // Use "an" for vowel-starting words (artist, album)
+      const article = /^[aeiou]/i.test(itemTypeLabel) ? "an" : "a";
+      
+      let notificationBody = `${senderName} sent you ${article} ${itemTypeLabel} "${itemName}"`;
       if (message) {
         notificationBody += ` and said: ${message}`;
       }

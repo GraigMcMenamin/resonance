@@ -30,9 +30,11 @@ struct LoginView: View {
                 
                 // App logo/title
                 VStack(spacing: 16) {
-                    Image(systemName: "music.note.list")
-                        .font(.system(size: 80))
-                        .foregroundColor(.white)
+                    Image("AppLogo")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 120, height: 120)
+                        .cornerRadius(24)
                     
                     Text("resonance")
                         .font(.system(size: 48, weight: .bold))
