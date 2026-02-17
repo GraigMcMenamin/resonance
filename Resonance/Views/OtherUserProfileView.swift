@@ -451,6 +451,14 @@ struct OtherUserProfileView: View {
                 
                 Spacer()
                 
+                // User's rating percentage
+                if let rating = viewModel.ratings.first(where: { $0.spotifyId == item.id }) {
+                    Text("\(rating.percentage)%")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                }
+                
                 // Chevron
                 Image(systemName: "chevron.right")
                     .font(.caption)

@@ -308,6 +308,17 @@ struct ProfileView: View {
                 
                 Spacer()
                 
+                // User's rating percentage
+                if let userId = authManager.currentUser?.id {
+                    let ratingId = UserRating.makeId(userId: userId, spotifyId: item.id)
+                    if let rating = ratingsManager.getRating(for: ratingId) {
+                        Text("\(rating.percentage)%")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                    }
+                }
+                
                 // Chevron
                 Image(systemName: "chevron.right")
                     .font(.caption)
