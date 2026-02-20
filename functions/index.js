@@ -340,7 +340,8 @@ exports.onRatingCreated = onDocumentWritten(
                   payload: {
                     aps: {
                       sound: "default",
-                      badge: 1,
+                      // Don't set badge for rating/review notifications
+                      // Badge is reserved for actionable items (recommendations)
                     },
                   },
                 },

@@ -13,6 +13,7 @@ import UserNotifications
 @main
 struct ResonanceApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
     
     @StateObject private var authManager = AuthenticationManager()
     @StateObject private var firebaseService = FirebaseService()
@@ -35,6 +36,14 @@ struct ResonanceApp: App {
                 .environmentObject(notificationManager)
                 .onAppear {
                     setupNotifications()
+                }
+                .onChange(of: scenePhase) { oldPhase, newPhase in
+                    if newPhase == .active {
+                        // When app becomes active, refresh badge to show only pending recommendations
+                        Task {
+                            await notificationManager.refreshBadgeCount()
+                        }
+                    }
                 }
         }
     }

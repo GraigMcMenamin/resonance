@@ -15,6 +15,7 @@ import FirebaseMessaging
 class NotificationManager: NSObject, ObservableObject {
     @Published var hasPermission = false
     @Published var fcmToken: String?
+    @Published var pendingRecommendationsCount: Int = 0
     
     private var firebaseService: FirebaseService?
     private var currentUserId: String?
@@ -151,6 +152,49 @@ class NotificationManager: NSObject, ObservableObject {
     private func handleReviewNotification(_ userInfo: [AnyHashable: Any]) {
         // Handle review notification
         print("Review notification")
+    }
+    
+    // MARK: - Badge Management
+    
+    /// Update the app badge to show pending recommendations count
+    /// Call this when app becomes active or when recommendations change
+    func updateBadge(pendingCount: Int) {
+        pendingRecommendationsCount = pendingCount
+        UNUserNotificationCenter.current().setBadgeCount(pendingCount) { error in
+            if let error = error {
+                print("Error setting badge count: \(error)")
+            } else {
+                print("📛 Badge updated to \(pendingCount)")
+            }
+        }
+    }
+    
+    /// Clear the badge completely
+    func clearBadge() {
+        updateBadge(pendingCount: 0)
+    }
+    
+    /// Refresh badge count by fetching pending recommendations
+    func refreshBadgeCount() async {
+        guard let userId = currentUserId,
+              let firebaseService = firebaseService else {
+            return
+        }
+        
+        do {
+            let recommendations = try await firebaseService.getReceivedRecommendations(userId: userId)
+            // Get user's ratings to filter out already rated items
+            let userRatings = firebaseService.allRatings.filter { $0.userId == userId }
+            let ratedSpotifyIds = Set(userRatings.map { $0.spotifyId })
+            
+            let pendingCount = recommendations.filter { rec in
+                rec.status == .pending && !ratedSpotifyIds.contains(rec.spotifyId)
+            }.count
+            
+            updateBadge(pendingCount: pendingCount)
+        } catch {
+            print("Error refreshing badge count: \(error)")
+        }
     }
 }
 

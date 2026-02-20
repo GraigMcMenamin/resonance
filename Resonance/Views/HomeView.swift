@@ -34,6 +34,7 @@ struct HomeView: View {
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var ratingsManager: RatingsManager
+    @EnvironmentObject var notificationManager: NotificationManager
     @State private var selectedPeriod: TimePeriod = .weekly
     @State private var topSongs: [AggregatedRating] = []
     @State private var topArtists: [AggregatedRating] = []
@@ -242,6 +243,9 @@ struct HomeView: View {
                     return isPending && notRated
                 }
                 
+                // Update app badge to show pending recommendations count
+                notificationManager.updateBadge(pendingCount: pendingRecommendations.count)
+                
                 print("[HomeView] Loaded \(pendingRecommendations.count) pending recommendations")
             } catch {
                 print("[HomeView] Error loading recommendations: \(error)")
@@ -258,6 +262,10 @@ struct HomeView: View {
                     ratingId: nil
                 )
                 pendingRecommendations.removeAll { $0.id == recommendation.id }
+                
+                // Update app badge after ignoring
+                notificationManager.updateBadge(pendingCount: pendingRecommendations.count)
+                
                 print("[HomeView] Ignored recommendation: \(recommendation.itemName)")
             } catch {
                 print("[HomeView] Error ignoring recommendation: \(error)")
