@@ -761,7 +761,7 @@ struct TopItemPicker: View {
                     }
                 }
             }
-            .navigationTitle("select top 3 \(itemType.displayName)s")
+            .navigationTitle("select top 3 \(itemType.displayName)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -1048,9 +1048,9 @@ enum TopItemType: Identifiable {
     
     var displayName: String {
         switch self {
-        case .artist: return "Artists"
-        case .track: return "Songs"
-        case .album: return "Albums"
+        case .artist: return "artists"
+        case .track: return "songs"
+        case .album: return "albums"
         }
     }
 }
