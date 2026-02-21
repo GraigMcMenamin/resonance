@@ -37,7 +37,7 @@ struct ResonanceApp: App {
                 .onAppear {
                     setupNotifications()
                 }
-                .onChange(of: scenePhase) { oldPhase, newPhase in
+                .onChange(of: scenePhase) { newPhase in
                     if newPhase == .active {
                         // When app becomes active, refresh badge to show only pending recommendations
                         Task {

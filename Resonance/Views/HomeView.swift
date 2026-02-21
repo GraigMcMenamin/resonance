@@ -143,16 +143,16 @@ struct HomeView: View {
         } message: { recommendation in
             Text("This won't delete the recommendation, but it will remove it from your pending list.")
         }
-        .onChange(of: selectedPeriod) { oldValue, newValue in
+        .onChange(of: selectedPeriod) { newValue in
             print("[HomeView] Period changed to \(newValue.rawValue)")
             updateCharts()
         }
-        .onChange(of: firebaseService.allRatings) { oldValue, newValue in
-            print("[HomeView] Ratings changed: \(oldValue.count) → \(newValue.count)")
+        .onChange(of: firebaseService.allRatings) { newValue in
+            print("[HomeView] Ratings changed to \(newValue.count) ratings")
             updateCharts()
             loadPendingRecommendations()
         }
-        .onChange(of: authManager.currentUser?.id) { oldValue, newValue in
+        .onChange(of: authManager.currentUser?.id) { newValue in
             print("[HomeView] User changed, reloading recommendations")
             if newValue != nil {
                 loadPendingRecommendations()

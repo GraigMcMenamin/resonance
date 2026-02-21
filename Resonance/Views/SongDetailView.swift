@@ -118,7 +118,7 @@ struct SongDetailView: View {
             await loadTrackData()
             await loadBuddyRatings()
         }
-        .onChange(of: ratingsManager.allRatings) { _, _ in
+        .onChange(of: ratingsManager.allRatings) { _ in
             // Update buddy ratings when ratings change
             updateBuddyRatings()
         }

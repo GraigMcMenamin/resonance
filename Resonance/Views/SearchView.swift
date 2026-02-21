@@ -89,7 +89,7 @@ struct SearchView: View {
                     .environmentObject(authManager)
                     .environmentObject(firebaseService)
             }
-            .onChange(of: selectedTab) { oldValue, newValue in
+            .onChange(of: selectedTab) { _ in
                 performSearch()
             }
             .task {
@@ -169,7 +169,7 @@ struct SearchBar: View {
             TextField("search artists, albums, or songs...", text: $text)
                 .textFieldStyle(.plain)
                 .tint(.white)
-                .onChange(of: text) { oldValue, newValue in
+                .onChange(of: text) { _ in
                     onSearch()
                 }
             

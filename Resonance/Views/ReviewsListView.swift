@@ -327,7 +327,7 @@ struct ReviewCard: View {
                         .background(Color.white.opacity(0.1))
                         .cornerRadius(20)
                         .foregroundColor(.white)
-                        .onChange(of: newCommentText) { oldValue, newValue in
+                        .onChange(of: newCommentText) { newValue in
                             if newValue.count > maxCommentLength {
                                 newCommentText = String(newValue.prefix(maxCommentLength))
                             }

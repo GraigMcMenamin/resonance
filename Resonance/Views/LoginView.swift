@@ -498,7 +498,7 @@ struct EmailSignupView: View {
                     .interactiveDismissDisabled()
                 }
             }
-            .onChange(of: shouldDismissToSignIn) { _, newValue in
+            .onChange(of: shouldDismissToSignIn) { newValue in
                 if newValue {
                     dismiss()
                     onGoToSignIn?()

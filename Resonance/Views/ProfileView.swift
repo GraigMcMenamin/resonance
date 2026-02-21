@@ -85,7 +85,7 @@ struct ProfileView: View {
                     }
                 }
             }
-            .onChange(of: authManager.currentUser?.id) { oldValue, newValue in
+            .onChange(of: authManager.currentUser?.id) { newValue in
                 viewModel.setUserId(newValue)
                 buddyManager.setUserId(newValue)
                 
@@ -686,7 +686,7 @@ struct TopItemPicker: View {
                         TextField("Search \(itemType.displayName.lowercased())s", text: $searchText)
                             .textFieldStyle(.plain)
                             .foregroundColor(.white)
-                            .onChange(of: searchText) { oldValue, newValue in
+                            .onChange(of: searchText) { _ in
                                 Task {
                                     await performSearch()
                                 }

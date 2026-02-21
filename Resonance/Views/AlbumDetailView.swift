@@ -120,7 +120,7 @@ struct AlbumDetailView: View {
             await loadAlbumData()
             await loadBuddyRatings()
         }
-        .onChange(of: ratingsManager.allRatings) { _, _ in
+        .onChange(of: ratingsManager.allRatings) { _ in
             updateBuddyRatings()
         }
     }

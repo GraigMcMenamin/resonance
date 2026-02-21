@@ -39,14 +39,14 @@ struct LibraryView: View {
             }
             .navigationTitle(selectedSection == .myRatings ? "me" : "my buddies")
             .navigationBarTitleDisplayMode(.inline)
-            .onChange(of: selectedSection) { oldValue, newValue in
+            .onChange(of: selectedSection) { newValue in
                 if newValue == .buddyReviews {
                     Task {
                         await loadBuddyRatings()
                     }
                 }
             }
-            .onChange(of: buddyManager.buddies) { oldValue, newValue in
+            .onChange(of: buddyManager.buddies) { _ in
                 // Reload buddy ratings when buddies list changes
                 if selectedSection == .buddyReviews {
                     Task {

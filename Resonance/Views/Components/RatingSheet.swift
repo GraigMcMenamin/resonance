@@ -226,7 +226,7 @@ struct RatingSheet: View {
             }
             .pickerStyle(.segmented)
             .padding(.horizontal)
-            .onChange(of: selectedLength) { _, newValue in
+            .onChange(of: selectedLength) { newValue in
                 if newValue == .short && reviewContent.count >= minLongCharacters {
                     reviewContent = String(reviewContent.prefix(shortCharacterLimit))
                 }
@@ -260,7 +260,7 @@ struct RatingSheet: View {
                     .scrollContentBackground(.hidden)
                     .foregroundColor(.white)
                     .padding(8)
-                    .onChange(of: reviewContent) { _, newValue in
+                    .onChange(of: reviewContent) { newValue in
                         if selectedLength == .short && newValue.count > shortCharacterLimit {
                             reviewContent = String(newValue.prefix(shortCharacterLimit))
                         }

@@ -203,7 +203,7 @@ struct SendMusicView: View {
                 .cornerRadius(8)
                 .foregroundColor(.white)
                 .lineLimit(3...5)
-                .onChange(of: message) { _, newValue in
+                .onChange(of: message) { newValue in
                     if newValue.count > maxMessageLength {
                         message = String(newValue.prefix(maxMessageLength))
                     }

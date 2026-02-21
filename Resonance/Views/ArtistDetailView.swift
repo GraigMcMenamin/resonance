@@ -122,7 +122,7 @@ struct ArtistDetailView: View {
             await loadArtistData()
             await loadBuddyRatings()
         }
-        .onChange(of: ratingsManager.allRatings) { _, _ in
+        .onChange(of: ratingsManager.allRatings) { _ in
             updateBuddyRatings()
         }
     }

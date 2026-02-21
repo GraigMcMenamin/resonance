@@ -64,7 +64,7 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .onChange(of: authManager.currentUser?.id) { oldValue, newValue in
+        .onChange(of: authManager.currentUser?.id) { newValue in
             // Update notification manager with user ID
             notificationManager.setUserId(newValue)
         }
@@ -125,7 +125,7 @@ struct AuthenticatedView: View {
                 ratingsManager.clearUserRatings()
             }
         }
-        .onChange(of: authManager.currentUser?.id) { oldValue, newValue in
+        .onChange(of: authManager.currentUser?.id) { newValue in
             Task {
                 if let newUserId = newValue, !authManager.isGuestMode {
                     // User changed, load their ratings
@@ -136,7 +136,7 @@ struct AuthenticatedView: View {
                 }
             }
         }
-        .onChange(of: authManager.isGuestMode) { oldValue, newValue in
+        .onChange(of: authManager.isGuestMode) { newValue in
             if newValue {
                 // Switched to guest mode, clear ratings
                 ratingsManager.clearUserRatings()

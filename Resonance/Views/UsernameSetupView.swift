@@ -52,7 +52,7 @@ struct UsernameSetupView: View {
                             .foregroundColor(.white)
                             .autocapitalization(.none)
                             .disableAutocorrection(true)
-                            .onChange(of: username) { oldValue, newValue in
+                            .onChange(of: username) { newValue in
                                 // Filter to alphanumeric only
                                 let filtered = newValue.filter { $0.isLetter || $0.isNumber }
                                 if filtered != newValue {
