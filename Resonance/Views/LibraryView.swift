@@ -428,15 +428,15 @@ struct RatingRow: View {
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
-                    
-                    Text(rating.dateRated.formatted(date: .abbreviated, time: .omitted))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
                 
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 4) {
+                    Text(rating.dateRated.formatted(date: .abbreviated, time: .omitted))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
                     // Percentage
                     Text("\(rating.percentage)%")
                         .font(.title3)
@@ -611,22 +611,15 @@ struct LibraryBuddyRatingRow: View {
                         .foregroundColor(.gray)
                 }
                 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(rating.username ?? "Unknown")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                    Text(rating.dateRated.formatted(date: .abbreviated, time: .omitted))
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
+                Text(rating.username ?? "Unknown")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
                 
                 Spacer()
                 
-                // Percentage badge
-                Text("\(rating.percentage)%")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(percentageColor)
+                Text(rating.dateRated.formatted(date: .abbreviated, time: .omitted))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
             
             // Item info
@@ -671,6 +664,14 @@ struct LibraryBuddyRatingRow: View {
                             .lineLimit(1)
                     }
                 }
+                
+                Spacer()
+                
+                // Percentage badge
+                Text("\(rating.percentage)%")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(percentageColor)
             }
             
             // Review content (if they wrote one)
@@ -825,15 +826,10 @@ struct RecommendationFeedRow: View {
                 
                 // Rating badge or pending status
                 if let rating = receiverRating {
-                    VStack(spacing: 2) {
-                        Text("\(rating.percentage)%")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundColor(percentageColor)
-                        Text("rated")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
+                    Text("\(rating.percentage)%")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(percentageColor)
                 } else {
                     VStack(spacing: 2) {
                         Image(systemName: "clock")
