@@ -683,7 +683,7 @@ struct TopItemPicker: View {
                         Image(systemName: "magnifyingglass")
                             .foregroundColor(.white.opacity(0.5))
                         
-                        TextField("Search \(itemType.displayName.lowercased())s", text: $searchText)
+                        TextField("Search \(itemType.displayName.lowercased())", text: $searchText)
                             .textFieldStyle(.plain)
                             .foregroundColor(.white)
                             .onChange(of: searchText) { _ in

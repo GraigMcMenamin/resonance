@@ -145,9 +145,8 @@ struct LibraryView: View {
                     ForEach(buddyFeedItems) { item in
                         switch item {
                         case .rating(let rating):
-                            NavigationLink(destination: destinationView(for: rating)) {
-                                LibraryBuddyRatingRow(rating: rating)
-                            }
+                            LibraryBuddyRatingRow(rating: rating)
+                                .listRowInsets(EdgeInsets())
                         case .recommendation(let rec, let receiverRating):
                             NavigationLink(destination: destinationView(forRecommendation: rec)) {
                                 RecommendationFeedRow(
@@ -580,8 +579,15 @@ struct LibraryBuddyRatingRow: View {
     @State private var isLoadingComments = false
     @State private var isSubmittingComment = false
     @State private var isTogglingLike = false
+    @State private var navigateToMusic = false
+    @State private var navigateToReviews = false
+    @State private var navigateToProfile = false
+    @State private var showAllComments = false
+    @State private var hasLoadedInteractions = false
+    @State private var hasLoadedComments = false
     
     private let maxCommentLength = 100
+    private let maxVisibleComments = 3
     
     private var percentageColor: Color {
         let pct = Double(rating.percentage)
@@ -606,31 +612,49 @@ struct LibraryBuddyRatingRow: View {
         Set(buddyManager.buddies.map { $0.id })
     }
     
+    private var reviewType: Review.ReviewType {
+        switch rating.type {
+        case .artist: return .artist
+        case .album: return .album
+        case .track: return .track
+        }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Hidden NavigationLink for profile
+            NavigationLink(destination: BuddyProfileDestination(userId: rating.userId), isActive: $navigateToProfile) {
+                EmptyView()
+            }
+            .hidden()
+            .frame(width: 0, height: 0)
+            
             // Header with buddy info
             HStack(spacing: 8) {
-                // Buddy avatar
-                if let imageURLString = rating.userImageURL, let url = URL(string: imageURLString) {
-                    CustomAsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 32, height: 32)
-                                .clipShape(Circle())
-                        default:
-                            Image(systemName: "person.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(.gray)
+                // Buddy avatar - tappable to view profile
+                Button(action: { navigateToProfile = true }) {
+                    if let imageURLString = rating.userImageURL, let url = URL(string: imageURLString) {
+                        CustomAsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 32, height: 32)
+                                    .clipShape(Circle())
+                            default:
+                                Image(systemName: "person.circle.fill")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(.gray)
+                            }
                         }
+                    } else {
+                        Image(systemName: "person.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(.gray)
                     }
-                } else {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundColor(.gray)
                 }
+                .buttonStyle(.plain)
                 
                 Text(rating.username ?? "Unknown")
                     .font(.subheadline)
@@ -643,57 +667,77 @@ struct LibraryBuddyRatingRow: View {
                     .foregroundColor(.secondary)
             }
             
-            // Item info
-            HStack(spacing: 12) {
-                // Item image
-                if let imageURLString = rating.imageURL, let url = URL(string: imageURLString) {
-                    CustomAsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 50, height: 50)
-                                .clipShape(rating.type == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
-                        default:
-                            Image(systemName: itemTypeIcon)
-                                .font(.title2)
-                                .foregroundColor(.gray)
-                                .frame(width: 50, height: 50)
-                                .background(Color.gray.opacity(0.2))
-                                .clipShape(rating.type == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+            // Item info - tappable to navigate to music page
+            NavigationLink(destination: musicDestination, isActive: $navigateToMusic) {
+                EmptyView()
+            }
+            .hidden()
+            .frame(width: 0, height: 0)
+            
+            // Hidden NavigationLink for reviews
+            NavigationLink(destination: reviewsDestination, isActive: $navigateToReviews) {
+                EmptyView()
+            }
+            .hidden()
+            .frame(width: 0, height: 0)
+            
+            Button(action: { navigateToMusic = true }) {
+                HStack(spacing: 12) {
+                    // Item image
+                    if let imageURLString = rating.imageURL, let url = URL(string: imageURLString) {
+                        CustomAsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 50, height: 50)
+                                    .clipShape(rating.type == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                            default:
+                                Image(systemName: itemTypeIcon)
+                                    .font(.title2)
+                                    .foregroundColor(.gray)
+                                    .frame(width: 50, height: 50)
+                                    .background(Color.gray.opacity(0.2))
+                                    .clipShape(rating.type == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                            }
+                        }
+                    } else {
+                        Image(systemName: itemTypeIcon)
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 50, height: 50)
+                            .background(Color.gray.opacity(0.2))
+                            .clipShape(rating.type == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(rating.name)
+                            .font(.headline)
+                            .lineLimit(1)
+                        
+                        if let artistName = rating.artistName {
+                            Text(artistName)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
                         }
                     }
-                } else {
-                    Image(systemName: itemTypeIcon)
-                        .font(.title2)
-                        .foregroundColor(.gray)
-                        .frame(width: 50, height: 50)
-                        .background(Color.gray.opacity(0.2))
-                        .clipShape(rating.type == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(rating.name)
-                        .font(.headline)
-                        .lineLimit(1)
                     
-                    if let artistName = rating.artistName {
-                        Text(artistName)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
+                    Spacer()
+                    
+                    // Percentage badge
+                    Text("\(rating.percentage)%")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(percentageColor)
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.3))
                 }
-                
-                Spacer()
-                
-                // Percentage badge
-                Text("\(rating.percentage)%")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(percentageColor)
             }
+            .buttonStyle(.plain)
             
             // Review content (if they wrote one)
             if rating.hasReviewContent, let content = rating.reviewContent {
@@ -711,72 +755,130 @@ struct LibraryBuddyRatingRow: View {
                 .padding(.top, 4)
             }
             
-            // Like and Comment buttons
-            Divider()
-                .background(Color.white.opacity(0.1))
-            
-            HStack(spacing: 24) {
-                Button(action: toggleLike) {
-                    HStack(spacing: 6) {
-                        Image(systemName: isLiked ? "heart.fill" : "heart")
-                            .font(.system(size: 18))
-                            .foregroundColor(isLiked ? .red : .white.opacity(0.6))
-                        
-                        if likesCount > 0 {
-                            Text("\(likesCount)")
-                                .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.6))
-                        }
-                    }
-                }
-                .disabled(isTogglingLike || authManager.currentUser == nil)
-                
-                Button(action: {
-                    withAnimation {
-                        showComments.toggle()
-                        if showComments && comments.isEmpty {
-                            Task { await loadComments() }
-                        }
-                    }
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "bubble.right")
-                            .font(.system(size: 18))
-                            .foregroundColor(.white.opacity(0.6))
-                        
-                        if commentsCount > 0 {
-                            Text("\(commentsCount)")
-                                .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.6))
-                        }
-                    }
-                }
-                
+            // Like and Comment buttons on bottom right
+            HStack {
                 Spacer()
+                
+                HStack(spacing: 16) {
+                    // Like button - always likes the rating directly
+                    Button(action: toggleLike) {
+                        HStack(spacing: 4) {
+                            Image(systemName: isLiked ? "heart.fill" : "heart")
+                                .font(.system(size: 14))
+                                .foregroundColor(isLiked ? .red : .white.opacity(0.6))
+                            
+                            if likesCount > 0 {
+                                Text("\(likesCount)")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isTogglingLike || authManager.currentUser == nil)
+                    
+                    // Comment button
+                    Button(action: handleCommentTap) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "bubble.right")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white.opacity(0.6))
+                            
+                            if commentsCount > 0 {
+                                Text("\(commentsCount)")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(.top, 4)
             
-            // Comments section
-            if showComments {
+            // Inline comments section (for ratings without a written review)
+            if !rating.hasReviewContent && (!comments.isEmpty || showComments) {
                 commentsSection
             }
         }
         .padding(.vertical, 8)
+        .padding(.horizontal)
         .task {
+            guard !hasLoadedInteractions else { return }
+            hasLoadedInteractions = true
             await loadInteractions()
+            // Auto-load comments for inline display
+            if !rating.hasReviewContent {
+                await loadComments()
+            }
         }
         .onAppear {
-            likesCount = rating.likesCount ?? 0
-            commentsCount = rating.commentsCount ?? 0
+            if !hasLoadedInteractions {
+                likesCount = rating.likesCount ?? 0
+                commentsCount = rating.commentsCount ?? 0
+            }
+        }
+    }
+    
+    // MARK: - Navigation Destinations
+    
+    @ViewBuilder
+    private var musicDestination: some View {
+        switch rating.type {
+        case .artist:
+            ArtistDetailView(
+                artistId: rating.spotifyId,
+                artistName: rating.name,
+                artistImageURL: rating.imageURL.flatMap { URL(string: $0) }
+            )
+        case .album:
+            AlbumDetailView(
+                albumId: rating.spotifyId,
+                albumName: rating.name,
+                artistName: rating.artistName ?? "",
+                imageURL: rating.imageURL.flatMap { URL(string: $0) }
+            )
+        case .track:
+            SongDetailView(
+                trackId: rating.spotifyId,
+                trackName: rating.name,
+                artistName: rating.artistName ?? "",
+                albumName: nil,
+                albumId: nil,
+                imageURL: rating.imageURL.flatMap { URL(string: $0) }
+            )
+        }
+    }
+    
+    @ViewBuilder
+    private var reviewsDestination: some View {
+        ReviewsListView(
+            spotifyId: rating.spotifyId,
+            itemName: rating.name,
+            artistName: rating.artistName,
+            imageURL: rating.imageURL.flatMap { URL(string: $0) },
+            reviewType: reviewType,
+            scrollToReviewId: rating.id
+        )
+    }
+    
+    // MARK: - Comment Tap Handler
+    
+    private func handleCommentTap() {
+        if rating.hasReviewContent {
+            // Has a written review: navigate to ReviewsListView and scroll to this review
+            navigateToReviews = true
+        } else {
+            // No written review: toggle the comment input field
+            withAnimation {
+                showComments.toggle()
+            }
         }
     }
     
     private var commentsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Divider()
-                .background(Color.white.opacity(0.1))
-            
-            if authManager.currentUser != nil {
+            if showComments && authManager.currentUser != nil {
                 HStack(spacing: 8) {
                     TextField("Add a comment...", text: $newCommentText)
                         .textFieldStyle(PlainTextFieldStyle())
@@ -798,7 +900,7 @@ struct LibraryBuddyRatingRow: View {
                         } else {
                             Image(systemName: "arrow.up.circle.fill")
                                 .font(.system(size: 28))
-                                .foregroundColor(newCommentText.isEmpty ? .white.opacity(0.3) : .purple)
+                                .foregroundColor(newCommentText.isEmpty ? .white.opacity(0.3) : Color(red: 0.4, green: 0.2, blue: 0.6))
                         }
                     }
                     .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmittingComment)
@@ -811,31 +913,44 @@ struct LibraryBuddyRatingRow: View {
                 }
             }
             
-            if isLoadingComments {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                        .tint(.white)
-                    Spacer()
+            if !comments.isEmpty {
+                let visibleComments = showAllComments ? sortedComments : Array(sortedComments.prefix(maxVisibleComments))
+                ForEach(visibleComments) { comment in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("@\(comment.username ?? "user") commented")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.5))
+                        
+                        CommentRow(
+                            comment: comment,
+                            reviewId: rating.id,
+                            initialLikesCount: commentLikeCounts[comment.id] ?? 0,
+                            onDelete: {
+                                await deleteComment(comment)
+                            },
+                            largerIcons: true
+                        )
+                        .environmentObject(authManager)
+                        .environmentObject(firebaseService)
+                    }
                 }
-                .padding(.vertical, 8)
-            } else if comments.isEmpty {
-                Text("No comments yet")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.5))
-                    .padding(.vertical, 8)
-            } else {
-                ForEach(sortedComments) { comment in
-                    CommentRow(
-                        comment: comment,
-                        reviewId: rating.id,
-                        initialLikesCount: commentLikeCounts[comment.id] ?? 0,
-                        onDelete: {
-                            await deleteComment(comment)
-                        }
-                    )
-                    .environmentObject(authManager)
-                    .environmentObject(firebaseService)
+                
+                if sortedComments.count > maxVisibleComments && !showAllComments {
+                    Button(action: { withAnimation { showAllComments = true } }) {
+                        Text("show \(sortedComments.count - maxVisibleComments) more comment\(sortedComments.count - maxVisibleComments == 1 ? "" : "s")")
+                            .font(.caption)
+                            .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
+                } else if showAllComments && sortedComments.count > maxVisibleComments {
+                    Button(action: { withAnimation { showAllComments = false } }) {
+                        Text("show less")
+                            .font(.caption)
+                            .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
                 }
             }
         }
@@ -870,6 +985,8 @@ struct LibraryBuddyRatingRow: View {
     }
     
     private func loadComments() async {
+        guard !hasLoadedComments else { return }
+        hasLoadedComments = true
         isLoadingComments = true
         do {
             comments = try await firebaseService.getReviewComments(reviewId: rating.id)
@@ -880,6 +997,7 @@ struct LibraryBuddyRatingRow: View {
             }
         } catch {
             print("Error loading comments: \(error)")
+            hasLoadedComments = false // Allow retry on error
         }
         isLoadingComments = false
     }

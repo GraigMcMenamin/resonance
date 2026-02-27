@@ -98,14 +98,14 @@ struct AuthenticatedView: View {
                         Label("home", systemImage: "house.fill")
                     }
                 
-                SearchView()
-                    .tabItem {
-                        Label("search", systemImage: "magnifyingglass")
-                    }
-                
                 LibraryView()
                     .tabItem {
                         Label("buddies & me", systemImage: "music.note.list")
+                    }
+                
+                SearchView()
+                    .tabItem {
+                        Label("search", systemImage: "magnifyingglass")
                     }
                 
                 ProfileView()

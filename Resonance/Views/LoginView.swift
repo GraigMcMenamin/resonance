@@ -40,7 +40,7 @@ struct LoginView: View {
                         .font(.system(size: 48, weight: .bold))
                         .foregroundColor(.white)
                     
-                    Text("see what people think about music")
+                    Text("the app designed to put people on")
                         .font(.system(size: 18))
                         .foregroundColor(.white.opacity(0.7))
                 }

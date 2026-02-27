@@ -13,6 +13,7 @@ struct ReviewsListView: View {
     let artistName: String?
     let imageURL: URL?
     let reviewType: Review.ReviewType
+    var scrollToReviewId: String? = nil
     
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
@@ -23,6 +24,7 @@ struct ReviewsListView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var selectedLength: Review.ReviewLength = .short
+    @State private var didScrollToTarget = false
     
     var body: some View {
         ZStack {
@@ -59,24 +61,43 @@ struct ReviewsListView: View {
                     emptyStateView
                     Spacer()
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 16) {
-                            ForEach(sortedFilteredReviews) { review in
-                                ReviewCard(
-                                    review: review,
-                                    initialLikesCount: reviewLikeCounts[review.id] ?? 0,
-                                    buddyIds: buddyIds
-                                )
-                                .environmentObject(authManager)
-                                .environmentObject(firebaseService)
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 16) {
+                                ForEach(sortedFilteredReviews) { review in
+                                    ReviewCard(
+                                        review: review,
+                                        initialLikesCount: reviewLikeCounts[review.id] ?? 0,
+                                        buddyIds: buddyIds,
+                                        autoExpandComments: review.id == scrollToReviewId
+                                    )
+                                    .id(review.id)
+                                    .environmentObject(authManager)
+                                    .environmentObject(firebaseService)
+                                }
+                            }
+                            .padding()
+                        }
+                        .onChange(of: isLoading) { loading in
+                            if !loading, !didScrollToTarget, let targetId = scrollToReviewId {
+                                // Auto-select the correct length tab for the target review
+                                if let targetReview = reviews.first(where: { $0.id == targetId }),
+                                   let length = targetReview.reviewLength, length != selectedLength {
+                                    selectedLength = length
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    withAnimation {
+                                        proxy.scrollTo(targetId, anchor: .top)
+                                    }
+                                    didScrollToTarget = true
+                                }
                             }
                         }
-                        .padding()
                     }
                 }
             }
         }
-        .navigationTitle("Reviews")
+        .navigationTitle("Reviews for \(itemName)")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await loadReviews()
@@ -158,6 +179,7 @@ struct ReviewCard: View {
     let review: Review
     let initialLikesCount: Int
     let buddyIds: Set<String>
+    var autoExpandComments: Bool = false
     
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
@@ -172,8 +194,12 @@ struct ReviewCard: View {
     @State private var isLoadingComments = false
     @State private var isSubmittingComment = false
     @State private var isTogglingLike = false
+    @State private var showAllComments = false
+    @State private var hasLoadedInteractions = false
+    @State private var hasLoadedComments = false
     
     private let maxCommentLength = 100
+    private let maxVisibleComments = 3
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -285,10 +311,19 @@ struct ReviewCard: View {
                 .fill(Color.white.opacity(0.05))
         )
         .task {
+            guard !hasLoadedInteractions else { return }
+            hasLoadedInteractions = true
             await loadInteractions()
+            // Auto-load comments to show buddy comments
+            await loadComments()
         }
         .onAppear {
-            likesCount = initialLikesCount
+            if !hasLoadedInteractions {
+                likesCount = initialLikesCount
+            }
+            if autoExpandComments && !showComments {
+                showComments = true
+            }
         }
     }
     
@@ -341,7 +376,7 @@ struct ReviewCard: View {
                         } else {
                             Image(systemName: "arrow.up.circle.fill")
                                 .font(.system(size: 28))
-                                .foregroundColor(newCommentText.isEmpty ? .white.opacity(0.3) : .purple)
+                                .foregroundColor(newCommentText.isEmpty ? .white.opacity(0.3) : Color(red: 0.4, green: 0.2, blue: 0.6))
                         }
                     }
                     .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmittingComment)
@@ -368,17 +403,77 @@ struct ReviewCard: View {
                     .foregroundColor(.white.opacity(0.5))
                     .padding(.vertical, 8)
             } else {
-                ForEach(sortedComments) { comment in
-                    CommentRow(
-                        comment: comment,
-                        reviewId: review.id,
-                        initialLikesCount: commentLikeCounts[comment.id] ?? 0,
-                        onDelete: {
-                            await deleteComment(comment)
+                // Show buddy comments auto-expanded (first 3), others require manual expand
+                let buddyCommentsList = sortedComments.filter { buddyIds.contains($0.userId) }
+                let otherCommentsList = sortedComments.filter { !buddyIds.contains($0.userId) }
+                let visibleBuddyComments = showAllComments ? buddyCommentsList : Array(buddyCommentsList.prefix(maxVisibleComments))
+                
+                if !visibleBuddyComments.isEmpty {
+                    ForEach(visibleBuddyComments) { comment in
+                        CommentRow(
+                            comment: comment,
+                            reviewId: review.id,
+                            initialLikesCount: commentLikeCounts[comment.id] ?? 0,
+                            onDelete: {
+                                await deleteComment(comment)
+                            }
+                        )
+                        .environmentObject(authManager)
+                        .environmentObject(firebaseService)
+                    }
+                    
+                    if buddyCommentsList.count > maxVisibleComments && !showAllComments {
+                        Button(action: { withAnimation { showAllComments = true } }) {
+                            Text("show \(buddyCommentsList.count - maxVisibleComments) more buddy comment\(buddyCommentsList.count - maxVisibleComments == 1 ? "" : "s")")
+                                .font(.caption)
+                                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
                         }
-                    )
-                    .environmentObject(authManager)
-                    .environmentObject(firebaseService)
+                        .padding(.top, 4)
+                    }
+                }
+                
+                if showComments && !otherCommentsList.isEmpty {
+                    let visibleOtherComments = showAllComments ? otherCommentsList : Array(otherCommentsList.prefix(maxVisibleComments))
+                    ForEach(visibleOtherComments) { comment in
+                        CommentRow(
+                            comment: comment,
+                            reviewId: review.id,
+                            initialLikesCount: commentLikeCounts[comment.id] ?? 0,
+                            onDelete: {
+                                await deleteComment(comment)
+                            }
+                        )
+                        .environmentObject(authManager)
+                        .environmentObject(firebaseService)
+                    }
+                    
+                    if otherCommentsList.count > maxVisibleComments && !showAllComments {
+                        Button(action: { withAnimation { showAllComments = true } }) {
+                            Text("show \(otherCommentsList.count - maxVisibleComments) more comment\(otherCommentsList.count - maxVisibleComments == 1 ? "" : "s")")
+                                .font(.caption)
+                                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                        }
+                        .padding(.top, 4)
+                    }
+                } else if !showComments && !otherCommentsList.isEmpty {
+                    // Show a hint that there are more non-buddy comments
+                    Button(action: {
+                        withAnimation { showComments = true }
+                    }) {
+                        Text("show \(otherCommentsList.count) more comment\(otherCommentsList.count == 1 ? "" : "s")")
+                            .font(.caption)
+                            .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                    }
+                    .padding(.top, 4)
+                }
+                
+                if showAllComments {
+                    Button(action: { withAnimation { showAllComments = false } }) {
+                        Text("show less")
+                            .font(.caption)
+                            .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                    }
+                    .padding(.top, 4)
                 }
             }
         }
@@ -419,6 +514,8 @@ struct ReviewCard: View {
     }
     
     private func loadComments() async {
+        guard !hasLoadedComments else { return }
+        hasLoadedComments = true
         isLoadingComments = true
         do {
             comments = try await firebaseService.getReviewComments(reviewId: review.id)
@@ -429,6 +526,7 @@ struct ReviewCard: View {
             }
         } catch {
             print("Error loading comments: \(error)")
+            hasLoadedComments = false
         }
         isLoadingComments = false
     }
@@ -510,6 +608,7 @@ struct CommentRow: View {
     let reviewId: String
     let initialLikesCount: Int
     let onDelete: () async -> Void
+    var largerIcons: Bool = false
     
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
@@ -569,12 +668,12 @@ struct CommentRow: View {
                     Button(action: toggleLike) {
                         HStack(spacing: 4) {
                             Image(systemName: isLiked ? "heart.fill" : "heart")
-                                .font(.system(size: 12))
+                                .font(.system(size: largerIcons ? 15 : 12))
                                 .foregroundColor(isLiked ? .red : .white.opacity(0.4))
                             
                             if likesCount > 0 {
                                 Text("\(likesCount)")
-                                    .font(.caption2)
+                                    .font(largerIcons ? .caption : .caption2)
                                     .foregroundColor(.white.opacity(0.4))
                             }
                         }
@@ -584,7 +683,7 @@ struct CommentRow: View {
                     if isOwnComment {
                         Button(action: { showDeleteConfirmation = true }) {
                             Image(systemName: "trash")
-                                .font(.system(size: 12))
+                                .font(.system(size: largerIcons ? 15 : 12))
                                 .foregroundColor(.white.opacity(0.4))
                         }
                     }
