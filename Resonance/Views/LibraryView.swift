@@ -566,6 +566,23 @@ struct BuddyRatingsStatsCard: View {
 struct LibraryBuddyRatingRow: View {
     let rating: UserRating
     
+    @EnvironmentObject var authManager: AuthenticationManager
+    @EnvironmentObject var firebaseService: FirebaseService
+    @EnvironmentObject var buddyManager: BuddyManager
+    
+    @State private var isLiked = false
+    @State private var likesCount = 0
+    @State private var commentsCount = 0
+    @State private var showComments = false
+    @State private var comments: [ReviewComment] = []
+    @State private var commentLikeCounts: [String: Int] = [:]
+    @State private var newCommentText = ""
+    @State private var isLoadingComments = false
+    @State private var isSubmittingComment = false
+    @State private var isTogglingLike = false
+    
+    private let maxCommentLength = 100
+    
     private var percentageColor: Color {
         let pct = Double(rating.percentage)
         switch pct {
@@ -583,6 +600,10 @@ struct LibraryBuddyRatingRow: View {
         case .album: return "square.stack"
         case .track: return "music.note"
         }
+    }
+    
+    private var buddyIds: Set<String> {
+        Set(buddyManager.buddies.map { $0.id })
     }
     
     var body: some View {
@@ -689,8 +710,249 @@ struct LibraryBuddyRatingRow: View {
                 }
                 .padding(.top, 4)
             }
+            
+            // Like and Comment buttons
+            Divider()
+                .background(Color.white.opacity(0.1))
+            
+            HStack(spacing: 24) {
+                Button(action: toggleLike) {
+                    HStack(spacing: 6) {
+                        Image(systemName: isLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 18))
+                            .foregroundColor(isLiked ? .red : .white.opacity(0.6))
+                        
+                        if likesCount > 0 {
+                            Text("\(likesCount)")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                    }
+                }
+                .disabled(isTogglingLike || authManager.currentUser == nil)
+                
+                Button(action: {
+                    withAnimation {
+                        showComments.toggle()
+                        if showComments && comments.isEmpty {
+                            Task { await loadComments() }
+                        }
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bubble.right")
+                            .font(.system(size: 18))
+                            .foregroundColor(.white.opacity(0.6))
+                        
+                        if commentsCount > 0 {
+                            Text("\(commentsCount)")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(.top, 4)
+            
+            // Comments section
+            if showComments {
+                commentsSection
+            }
         }
         .padding(.vertical, 8)
+        .task {
+            await loadInteractions()
+        }
+        .onAppear {
+            likesCount = rating.likesCount ?? 0
+            commentsCount = rating.commentsCount ?? 0
+        }
+    }
+    
+    private var commentsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+                .background(Color.white.opacity(0.1))
+            
+            if authManager.currentUser != nil {
+                HStack(spacing: 8) {
+                    TextField("Add a comment...", text: $newCommentText)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .padding(10)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(20)
+                        .foregroundColor(.white)
+                        .onChange(of: newCommentText) { newValue in
+                            if newValue.count > maxCommentLength {
+                                newCommentText = String(newValue.prefix(maxCommentLength))
+                            }
+                        }
+                    
+                    Button(action: submitComment) {
+                        if isSubmittingComment {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(newCommentText.isEmpty ? .white.opacity(0.3) : .purple)
+                        }
+                    }
+                    .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmittingComment)
+                }
+                
+                if !newCommentText.isEmpty {
+                    Text("\(newCommentText.count)/\(maxCommentLength)")
+                        .font(.caption2)
+                        .foregroundColor(newCommentText.count >= maxCommentLength ? .orange : .white.opacity(0.4))
+                }
+            }
+            
+            if isLoadingComments {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .tint(.white)
+                    Spacer()
+                }
+                .padding(.vertical, 8)
+            } else if comments.isEmpty {
+                Text("No comments yet")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.vertical, 8)
+            } else {
+                ForEach(sortedComments) { comment in
+                    CommentRow(
+                        comment: comment,
+                        reviewId: rating.id,
+                        initialLikesCount: commentLikeCounts[comment.id] ?? 0,
+                        onDelete: {
+                            await deleteComment(comment)
+                        }
+                    )
+                    .environmentObject(authManager)
+                    .environmentObject(firebaseService)
+                }
+            }
+        }
+    }
+    
+    private var sortedComments: [ReviewComment] {
+        let buddyComments = comments.filter { buddyIds.contains($0.userId) }
+        let otherComments = comments.filter { !buddyIds.contains($0.userId) }
+        
+        let sortedBuddyComments = buddyComments.sorted {
+            (commentLikeCounts[$0.id] ?? 0) > (commentLikeCounts[$1.id] ?? 0)
+        }
+        let sortedOtherComments = otherComments.sorted {
+            (commentLikeCounts[$0.id] ?? 0) > (commentLikeCounts[$1.id] ?? 0)
+        }
+        
+        return sortedBuddyComments + sortedOtherComments
+    }
+    
+    private func loadInteractions() async {
+        do {
+            likesCount = try await firebaseService.getReviewLikesCount(reviewId: rating.id)
+            
+            if let userId = authManager.currentUser?.id {
+                isLiked = try await firebaseService.hasUserLikedReview(reviewId: rating.id, userId: userId)
+            }
+            
+            commentsCount = try await firebaseService.getReviewCommentsCount(reviewId: rating.id)
+        } catch {
+            print("Error loading interactions: \(error)")
+        }
+    }
+    
+    private func loadComments() async {
+        isLoadingComments = true
+        do {
+            comments = try await firebaseService.getReviewComments(reviewId: rating.id)
+            
+            for comment in comments {
+                let count = try await firebaseService.getCommentLikesCount(reviewId: rating.id, commentId: comment.id)
+                commentLikeCounts[comment.id] = count
+            }
+        } catch {
+            print("Error loading comments: \(error)")
+        }
+        isLoadingComments = false
+    }
+    
+    private func toggleLike() {
+        guard let user = authManager.currentUser else { return }
+        
+        isTogglingLike = true
+        
+        Task {
+            do {
+                if isLiked {
+                    try await firebaseService.unlikeReview(reviewId: rating.id, userId: user.id)
+                    await MainActor.run {
+                        isLiked = false
+                        likesCount = max(0, likesCount - 1)
+                    }
+                } else {
+                    try await firebaseService.likeReview(reviewId: rating.id, user: user)
+                    await MainActor.run {
+                        isLiked = true
+                        likesCount += 1
+                    }
+                }
+            } catch {
+                print("Error toggling like: \(error)")
+            }
+            
+            await MainActor.run {
+                isTogglingLike = false
+            }
+        }
+    }
+    
+    private func submitComment() {
+        guard let user = authManager.currentUser else { return }
+        let trimmedComment = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedComment.isEmpty else { return }
+        
+        let finalComment = String(trimmedComment.prefix(maxCommentLength))
+        
+        isSubmittingComment = true
+        
+        Task {
+            do {
+                let comment = try await firebaseService.addComment(to: rating.id, content: finalComment, user: user)
+                await MainActor.run {
+                    comments.append(comment)
+                    commentLikeCounts[comment.id] = 0
+                    commentsCount += 1
+                    newCommentText = ""
+                }
+            } catch {
+                print("Error submitting comment: \(error)")
+            }
+            
+            await MainActor.run {
+                isSubmittingComment = false
+            }
+        }
+    }
+    
+    private func deleteComment(_ comment: ReviewComment) async {
+        do {
+            try await firebaseService.deleteComment(reviewId: rating.id, commentId: comment.id)
+            await MainActor.run {
+                comments.removeAll { $0.id == comment.id }
+                commentLikeCounts.removeValue(forKey: comment.id)
+                commentsCount = max(0, commentsCount - 1)
+            }
+        } catch {
+            print("Error deleting comment: \(error)")
+        }
     }
 }
 
