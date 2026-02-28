@@ -188,7 +188,7 @@ struct HomeView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(Color.orange)
+                    .background(Color(red: 0.6, green: 0.4, blue: 0.8))
                     .cornerRadius(12)
             }
             .padding(.horizontal)
@@ -608,85 +608,141 @@ struct PendingRecommendationCard: View {
     let onTap: () -> Void
     let onIgnore: () -> Void
     
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Music item
-            HStack(spacing: 12) {
-                if let imageURL = recommendation.imageURL, let url = URL(string: imageURL) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        RoundedRectangle(cornerRadius: 6).fill(Color.gray.opacity(0.3))
-                    }
-                    .frame(width: 60, height: 60)
-                    .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(recommendation.itemName)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .lineLimit(2)
-                    
-                    if let artistName = recommendation.artistName {
-                        Text(artistName)
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.7))
-                            .lineLimit(1)
-                    }
-                    
-                    Text("from @\(recommendation.senderUsername ?? "unknown")")
-                        .font(.caption2)
-                        .foregroundColor(.orange)
-                }
-            }
-            
-            // Message from sender
-            if let message = recommendation.message, !message.isEmpty {
-                Text(message)
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(2)
-                    .padding(.top, 4)
-            }
-            
-            Divider()
-                .background(Color.white.opacity(0.2))
-            
-            // Actions
-            HStack(spacing: 8) {
-                Button(action: onTap) {
-                    Text("Review")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Color(red: 0.6, green: 0.4, blue: 0.8))
-                        .cornerRadius(8)
-                }
-                
-                Button(action: onIgnore) {
-                    Text("Ignore")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white.opacity(0.6))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(8)
-                }
-            }
+    @ViewBuilder
+    private var destinationView: some View {
+        switch recommendation.itemType {
+        case .artist:
+            ArtistDetailView(
+                artistId: recommendation.spotifyId,
+                artistName: recommendation.itemName,
+                artistImageURL: recommendation.imageURL.flatMap { URL(string: $0) }
+            )
+        case .album:
+            AlbumDetailView(
+                albumId: recommendation.spotifyId,
+                albumName: recommendation.itemName,
+                artistName: recommendation.artistName ?? "",
+                imageURL: recommendation.imageURL.flatMap { URL(string: $0) }
+            )
+        case .track:
+            SongDetailView(
+                trackId: recommendation.spotifyId,
+                trackName: recommendation.itemName,
+                artistName: recommendation.artistName ?? "",
+                albumName: nil,
+                albumId: nil,
+                imageURL: recommendation.imageURL.flatMap { URL(string: $0) }
+            )
         }
-        .padding()
+    }
+    
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            NavigationLink(destination: destinationView) {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Music item - fixed height
+                    HStack(spacing: 12) {
+                        if let imageURL = recommendation.imageURL, let url = URL(string: imageURL) {
+                            AsyncImage(url: url) { image in
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                RoundedRectangle(cornerRadius: 6).fill(Color.gray.opacity(0.3))
+                            }
+                            .frame(width: 60, height: 60)
+                            .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(recommendation.itemName)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .lineLimit(2)
+                            
+                            if let artistName = recommendation.artistName {
+                                Text(artistName)
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .lineLimit(1)
+                            }
+                            
+                            Text("from @\(recommendation.senderUsername ?? "unknown")")
+                                .font(.caption2)
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                        
+                        Spacer()
+                    }
+                    .frame(height: 70)
+                    .padding(.bottom, 8)
+                    
+                    // Message from sender - fixed height area
+                    Text(recommendation.message ?? " ")
+                        .font(.caption)
+                        .foregroundColor(recommendation.message != nil && !recommendation.message!.isEmpty ? .white.opacity(0.8) : .clear)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(height: 34)
+                    
+                    Spacer()
+                    
+                    // Actions
+                    HStack(spacing: 8) {
+                        Button(action: onTap) {
+                            Text("Review")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(Color(red: 0.6, green: 0.4, blue: 0.8))
+                                .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
+                        
+                        Button(action: onIgnore) {
+                            Text("Ignore")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white.opacity(0.6))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding()
+            }
+            .buttonStyle(.plain)
+            
+            // Spotify button overlay
+            Button(action: {
+                let typeString: String
+                switch recommendation.itemType {
+                case .artist: typeString = "artist"
+                case .album: typeString = "album"
+                case .track: typeString = "track"
+                }
+                
+                if let uri = SpotifyService.spotifyURI(type: typeString, id: recommendation.spotifyId),
+                   UIApplication.shared.canOpenURL(uri) {
+                    UIApplication.shared.open(uri)
+                } else if let webURL = SpotifyService.spotifyWebURL(type: typeString, id: recommendation.spotifyId) {
+                    UIApplication.shared.open(webURL)
+                }
+            }) {
+                Image(systemName: "arrow.up.right.circle")
+                    .font(.system(size: 24))
+                    .foregroundColor(.green)
+            }
+            .buttonStyle(.plain)
+            .padding(8)
+        }
         .frame(width: 250, height: 200)
         .background(Color.white.opacity(0.1))
         .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-        )
     }
 }
 
