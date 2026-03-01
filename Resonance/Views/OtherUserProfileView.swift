@@ -114,6 +114,9 @@ struct OtherUserProfileView: View {
                 .padding()
                 .background(Color.white.opacity(0.05))
                 .cornerRadius(12)
+        } else if authManager.currentUser?.id == user.id {
+            // Don't show buddy actions for own profile
+            EmptyView()
         } else {
             VStack(spacing: 12) {
                 switch buddyStatus {
@@ -216,6 +219,8 @@ struct OtherUserProfileView: View {
     
     private func sendBuddyRequest() async {
         guard let currentUser = authManager.currentUser else { return }
+        // Prevent sending a buddy request to yourself
+        guard currentUser.id != user.id else { return }
         isSendingRequest = true
         
         do {

@@ -154,7 +154,13 @@ struct RatingBarMini: View {
 struct BuddyRatingsSection: View {
     let buddyRatings: [UserRating]
     let buddies: [Buddy]
+    var userRating: UserRating? = nil
     @State private var showAllRatings = false
+    
+    /// Whether there's anything to show (user's own rating or buddy ratings)
+    private var hasAnyRatings: Bool {
+        userRating != nil || !buddyRatings.isEmpty
+    }
     
     private var displayedRatings: [UserRating] {
         if showAllRatings || buddyRatings.count <= 3 {
@@ -170,15 +176,25 @@ struct BuddyRatingsSection: View {
     }
     
     var body: some View {
-        if !buddyRatings.isEmpty {
+        if hasAnyRatings {
             VStack(alignment: .leading, spacing: 12) {
-                Text("buddy ratings")
+                Text("ratings")
                     .font(.caption)
                     .fontWeight(.semibold)
                     .foregroundColor(.white.opacity(0.6))
                     .textCase(.lowercase)
                 
                 VStack(spacing: 8) {
+                    // User's own rating first
+                    if let userRating = userRating {
+                        BuddyRatingRow(
+                            rating: userRating,
+                            username: userRating.username,
+                            imageURL: userRating.userImageURL,
+                            isCurrentUser: true
+                        )
+                    }
+                    
                     ForEach(displayedRatings) { rating in
                         let buddy = buddyInfo(for: rating.userId)
                         NavigationLink(destination: BuddyProfileDestination(userId: rating.userId)) {
@@ -259,6 +275,7 @@ struct BuddyRatingRow: View {
     let rating: UserRating
     let username: String?
     let imageURL: String?
+    var isCurrentUser: Bool = false
     
     private var ratingColor: Color {
         colorForPercentage(Double(rating.percentage))
@@ -271,7 +288,9 @@ struct BuddyRatingRow: View {
     
     /// Display name: prefer username
     private var displayUsername: String {
-        if let username = username, !username.isEmpty {
+        if isCurrentUser {
+            return "you"
+        } else if let username = username, !username.isEmpty {
             return "@\(username)"
         } else {
             return "User"

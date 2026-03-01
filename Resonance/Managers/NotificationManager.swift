@@ -11,13 +11,26 @@ import Combine
 import UserNotifications
 import FirebaseMessaging
 
+// MARK: - Deep Link Model
+
+enum NotificationDeepLink: Equatable {
+    /// Navigate to buddy ratings tab, optionally scroll to a specific feed item
+    case buddyRatingFeed(scrollToId: String?)
+    /// Navigate to ReviewsListView for a specific item
+    case reviewsList(spotifyId: String, itemName: String, artistName: String?, imageURL: String?, itemType: String, scrollToReviewId: String?)
+    /// Navigate to home page (for recommendation notifications)
+    case homePage
+}
+
 @MainActor
 class NotificationManager: NSObject, ObservableObject {
     @Published var hasPermission = false
     @Published var fcmToken: String?
     @Published var pendingRecommendationsCount: Int = 0
+    @Published var pendingDeepLink: NotificationDeepLink?
     
     private var firebaseService: FirebaseService?
+    private var buddyManager: BuddyManager?
     private var currentUserId: String?
     
     override init() {
@@ -27,6 +40,17 @@ class NotificationManager: NSObject, ObservableObject {
     
     func initialize(firebaseService: FirebaseService) {
         self.firebaseService = firebaseService
+    }
+    
+    func setBuddyManager(_ buddyManager: BuddyManager) {
+        self.buddyManager = buddyManager
+        
+        // Check for cold-start notification that AppDelegate captured
+        if let pendingUserInfo = AppDelegate.pendingNotificationUserInfo {
+            AppDelegate.pendingNotificationUserInfo = nil
+            print("📬 Processing cold-start notification: \(pendingUserInfo)")
+            handleNotificationTap(pendingUserInfo)
+        }
     }
     
     // MARK: - Permission Management
@@ -117,10 +141,15 @@ class NotificationManager: NSObject, ObservableObject {
     
     // MARK: - Notification Handling
     
+    /// Called when a notification is received (foreground) - just log it
     func handleNotification(_ userInfo: [AnyHashable: Any]) {
         print("📬 Received notification: \(userInfo)")
+    }
+    
+    /// Called when user taps a notification - set deep link for navigation
+    func handleNotificationTap(_ userInfo: [AnyHashable: Any]) {
+        print("📬 User tapped notification: \(userInfo)")
         
-        // Extract notification data
         guard let type = userInfo["type"] as? String else {
             print("Notification missing type")
             return
@@ -128,30 +157,79 @@ class NotificationManager: NSObject, ObservableObject {
         
         switch type {
         case "recommendation":
-            handleRecommendationNotification(userInfo)
-        case "rating":
-            handleRatingNotification(userInfo)
-        case "review":
-            handleReviewNotification(userInfo)
+            handleRecommendationTap(userInfo)
+        case "rating", "review":
+            handleBuddyRatingTap(userInfo)
+        case "like":
+            handleLikeTap(userInfo)
+        case "comment":
+            handleCommentTap(userInfo)
         default:
             print("Unknown notification type: \(type)")
         }
     }
     
-    private func handleRecommendationNotification(_ userInfo: [AnyHashable: Any]) {
-        // Handle song recommendation notification
-        // You can navigate to the appropriate view or update UI
-        print("Recommendation notification")
+    // MARK: - Tap Handlers
+    
+    private func handleRecommendationTap(_ userInfo: [AnyHashable: Any]) {
+        // Music sent to you → open on home page
+        pendingDeepLink = .homePage
     }
     
-    private func handleRatingNotification(_ userInfo: [AnyHashable: Any]) {
-        // Handle rating notification
-        print("Rating notification")
+    private func handleBuddyRatingTap(_ userInfo: [AnyHashable: Any]) {
+        let ratingId = userInfo["ratingId"] as? String
+        let scrollId = ratingId.map { "rating_\($0)" }
+        pendingDeepLink = .buddyRatingFeed(scrollToId: scrollId)
     }
     
-    private func handleReviewNotification(_ userInfo: [AnyHashable: Any]) {
-        // Handle review notification
-        print("Review notification")
+    private func handleLikeTap(_ userInfo: [AnyHashable: Any]) {
+        let likerId = userInfo["likerId"] as? String ?? ""
+        let hasReview = userInfo["hasReviewContent"] as? String == "true"
+        let isBuddy = buddyManager?.buddies.contains(where: { $0.id == likerId }) ?? false
+        
+        if hasReview && !isBuddy {
+            // Written review liked by non-buddy → reviews list page
+            setReviewsListDeepLink(from: userInfo)
+        } else {
+            // Buddy liked (written or not), or non-buddy liked percentage-only → buddy ratings page, scroll to it
+            let ratingId = userInfo["ratingId"] as? String
+            let scrollId = ratingId.map { "rating_\($0)" }
+            pendingDeepLink = .buddyRatingFeed(scrollToId: scrollId)
+        }
+    }
+    
+    private func handleCommentTap(_ userInfo: [AnyHashable: Any]) {
+        let commenterId = userInfo["commenterId"] as? String ?? ""
+        let hasReview = userInfo["hasReviewContent"] as? String == "true"
+        let isBuddy = buddyManager?.buddies.contains(where: { $0.id == commenterId }) ?? false
+        
+        if hasReview {
+            // Written review commented on (by buddy or non-buddy) → reviews list page
+            setReviewsListDeepLink(from: userInfo)
+        } else {
+            // Percentage-only rating commented on → buddy ratings page, scroll to it
+            let ratingId = userInfo["ratingId"] as? String
+            let scrollId = ratingId.map { "rating_\($0)" }
+            pendingDeepLink = .buddyRatingFeed(scrollToId: scrollId)
+        }
+    }
+    
+    private func setReviewsListDeepLink(from userInfo: [AnyHashable: Any]) {
+        let spotifyId = userInfo["spotifyId"] as? String ?? ""
+        let itemName = userInfo["itemName"] as? String ?? "Unknown"
+        let artistName = userInfo["artistName"] as? String
+        let imageURL = userInfo["imageURL"] as? String
+        let itemType = userInfo["itemType"] as? String ?? "track"
+        let ratingId = userInfo["ratingId"] as? String
+        
+        pendingDeepLink = .reviewsList(
+            spotifyId: spotifyId,
+            itemName: itemName,
+            artistName: artistName,
+            imageURL: imageURL,
+            itemType: itemType,
+            scrollToReviewId: ratingId
+        )
     }
     
     // MARK: - Badge Management
@@ -217,7 +295,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         completionHandler([.banner, .sound, .badge])
     }
     
-    // Handle notification tap
+    // Handle notification tap - set deep link for navigation
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -226,7 +304,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         let userInfo = response.notification.request.content.userInfo as [AnyHashable: Any]
         
         Task { @MainActor [userInfo] in
-            self.handleNotification(userInfo)
+            self.handleNotificationTap(userInfo)
         }
         
         completionHandler()

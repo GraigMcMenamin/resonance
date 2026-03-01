@@ -12,16 +12,31 @@ struct LibraryView: View {
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var buddyManager: BuddyManager
+    @EnvironmentObject var notificationManager: NotificationManager
     @State private var selectedFilter: RatingFilter = .all
     @State private var selectedSection: LibrarySection = .buddyReviews
     @State private var buddyRatings: [UserRating] = []
     @State private var buddyRecommendations: [MusicRecommendation] = []
     @State private var buddyFeedItems: [BuddyFeedItem] = []
     @State private var isLoadingBuddyRatings = false
+    @State private var deepLinkScrollToId: String? = nil
+    @State private var pendingScrollId: String? = nil
+    @State private var navigateToDeepLinkReviews = false
+    @State private var deepLinkReviewsDestination: NotificationDeepLink? = nil
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
+                // Hidden NavigationLink for deep link to ReviewsListView
+                NavigationLink(
+                    destination: deepLinkReviewsView,
+                    isActive: $navigateToDeepLinkReviews
+                ) {
+                    EmptyView()
+                }
+                .hidden()
+                .frame(width: 0, height: 0)
+                
                 // Section Picker (My Ratings vs Buddy Ratings)
                 Picker("Section", selection: $selectedSection) {
                     Text("buddy ratings").tag(LibrarySection.buddyReviews)
@@ -60,7 +75,77 @@ struct LibraryView: View {
                         await loadBuddyRatings()
                     }
                 }
+                // Check for deep link that was set before view appeared (cold start)
+                if let deepLink = notificationManager.pendingDeepLink {
+                    handleDeepLink(deepLink)
+                }
             }
+            .onChange(of: notificationManager.pendingDeepLink) { deepLink in
+                handleDeepLink(deepLink)
+            }
+        }
+    }
+    
+    // MARK: - Deep Link Handling
+    
+    @ViewBuilder
+    private var deepLinkReviewsView: some View {
+        if case .reviewsList(let spotifyId, let itemName, let artistName, let imageURL, let itemType, let scrollToReviewId) = deepLinkReviewsDestination {
+            let reviewType: Review.ReviewType = {
+                switch itemType {
+                case "artist": return .artist
+                case "album": return .album
+                default: return .track
+                }
+            }()
+            ReviewsListView(
+                spotifyId: spotifyId,
+                itemName: itemName,
+                artistName: artistName,
+                imageURL: imageURL.flatMap { URL(string: $0) },
+                reviewType: reviewType,
+                scrollToReviewId: scrollToReviewId
+            )
+        } else {
+            EmptyView()
+        }
+    }
+    
+    private func handleDeepLink(_ deepLink: NotificationDeepLink?) {
+        guard let deepLink = deepLink else { return }
+        
+        // Don't consume deep links meant for other tabs
+        switch deepLink {
+        case .homePage:
+            return
+        default:
+            break
+        }
+        
+        // Consume the deep link
+        notificationManager.pendingDeepLink = nil
+        
+        switch deepLink {
+        case .buddyRatingFeed(let scrollToId):
+            selectedSection = .buddyReviews
+            if let scrollToId = scrollToId {
+                // If feed is already loaded, scroll immediately; otherwise store for later
+                if !buddyFeedItems.isEmpty {
+                    deepLinkScrollToId = scrollToId
+                } else {
+                    // Feed not loaded yet - store and it will be applied after load
+                    pendingScrollId = scrollToId
+                }
+            }
+        case .reviewsList:
+            selectedSection = .buddyReviews
+            deepLinkReviewsDestination = deepLink
+            // Slight delay to ensure navigation hierarchy is ready
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                navigateToDeepLinkReviews = true
+            }
+        case .homePage:
+            break
         }
     }
     
@@ -112,53 +197,54 @@ struct LibraryView: View {
         VStack(spacing: 0) {
             if isLoadingBuddyRatings {
                 Spacer()
-                ProgressView("loading buddy activity...")
+                ProgressView("loading activity...")
                 Spacer()
-            } else if buddyManager.buddies.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "person.2.slash")
-                        .font(.system(size: 60))
-                        .foregroundColor(.gray)
-                    Text("no buddies yet")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    Text("add buddies to see their ratings here")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxHeight: .infinity)
             } else if buddyFeedItems.isEmpty {
                 VStack(spacing: 12) {
-                    Image(systemName: "star.slash")
+                    Image(systemName: buddyManager.buddies.isEmpty ? "person.2.slash" : "star.slash")
                         .font(.system(size: 60))
                         .foregroundColor(.gray)
-                    Text("no buddy activity yet")
+                    Text(buddyManager.buddies.isEmpty ? "no buddies yet" : "no activity yet")
                         .font(.headline)
                         .foregroundColor(.secondary)
-                    Text("your buddies haven't rated anything")
+                    Text(buddyManager.buddies.isEmpty ? "add buddies to see their ratings here" : "rate some music to see your activity here")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
                 .frame(maxHeight: .infinity)
             } else {
-                List {
-                    ForEach(buddyFeedItems) { item in
-                        switch item {
-                        case .rating(let rating):
-                            LibraryBuddyRatingRow(rating: rating)
-                                .listRowInsets(EdgeInsets())
-                        case .recommendation(let rec, let receiverRating):
-                            NavigationLink(destination: destinationView(forRecommendation: rec)) {
-                                RecommendationFeedRow(
-                                    recommendation: rec,
-                                    receiverRating: receiverRating,
-                                    currentUserId: authManager.currentUser?.id
-                                )
+                ScrollViewReader { proxy in
+                    List {
+                        ForEach(buddyFeedItems) { item in
+                            switch item {
+                            case .rating(let rating):
+                                LibraryBuddyRatingRow(rating: rating)
+                                    .listRowInsets(EdgeInsets())
+                                    .id(item.id)
+                            case .recommendation(let rec, let receiverRating):
+                                NavigationLink(destination: destinationView(forRecommendation: rec)) {
+                                    RecommendationFeedRow(
+                                        recommendation: rec,
+                                        receiverRating: receiverRating,
+                                        currentUserId: authManager.currentUser?.id
+                                    )
+                                }
+                                .id(item.id)
+                            }
+                        }
+                    }
+                    .listStyle(.plain)
+                    .onChange(of: deepLinkScrollToId) { scrollId in
+                        if let scrollId = scrollId {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                withAnimation {
+                                    proxy.scrollTo(scrollId, anchor: .top)
+                                }
+                                deepLinkScrollToId = nil
                             }
                         }
                     }
                 }
-                .listStyle(.plain)
             }
         }
     }
@@ -178,29 +264,28 @@ struct LibraryView: View {
         
         print("Loading buddy ratings for \(buddyIds.count) buddies: \(buddyIds)")
         
-        guard !buddyIds.isEmpty else {
-            print("No buddies found, skipping rating fetch")
-            isLoadingBuddyRatings = false
-            return
-        }
-        
         // Get buddy ratings from allRatings (already loaded via listener)
+        // Include both buddy ratings AND current user's own ratings
         let buddyIdSet = Set(buddyIds)
         buddyRatings = ratingsManager.allRatings
-            .filter { buddyIdSet.contains($0.userId) }
+            .filter { buddyIdSet.contains($0.userId) || $0.userId == currentUserId }
             .sorted { $0.dateRated > $1.dateRated }
         
         print("Found \(buddyRatings.count) buddy ratings")
         
-        // Also load recommendations
-        do {
-            buddyRecommendations = try await firebaseService.getBuddyRecommendations(
-                buddyIds: buddyIds,
-                currentUserId: currentUserId
-            )
-            print("Found \(buddyRecommendations.count) recommendations")
-        } catch {
-            print("Error loading recommendations: \(error)")
+        // Also load recommendations (only if there are buddies)
+        if !buddyIds.isEmpty {
+            do {
+                buddyRecommendations = try await firebaseService.getBuddyRecommendations(
+                    buddyIds: buddyIds,
+                    currentUserId: currentUserId
+                )
+                print("Found \(buddyRecommendations.count) recommendations")
+            } catch {
+                print("Error loading recommendations: \(error)")
+                buddyRecommendations = []
+            }
+        } else {
             buddyRecommendations = []
         }
         
@@ -208,6 +293,12 @@ struct LibraryView: View {
         buildBuddyFeed()
         
         isLoadingBuddyRatings = false
+        
+        // Apply any pending scroll from a deep link that arrived before data loaded
+        if let scrollId = pendingScrollId {
+            pendingScrollId = nil
+            deepLinkScrollToId = scrollId
+        }
     }
     
     private func buildBuddyFeed() {

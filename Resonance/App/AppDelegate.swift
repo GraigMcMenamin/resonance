@@ -10,6 +10,9 @@ import FirebaseCore
 import FirebaseMessaging
 
 class AppDelegate: NSObject, UIApplicationDelegate {
+    /// Stores notification userInfo from a cold-start tap, so NotificationManager can pick it up later
+    static var pendingNotificationUserInfo: [AnyHashable: Any]?
+    
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil
@@ -75,7 +78,10 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        print("User tapped notification: \(userInfo)")
+        print("User tapped notification (AppDelegate): \(userInfo)")
+        
+        // Store for NotificationManager to pick up on cold start
+        AppDelegate.pendingNotificationUserInfo = userInfo as? [AnyHashable: Any] ?? [:]
         
         completionHandler()
     }

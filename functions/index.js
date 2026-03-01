@@ -392,8 +392,80 @@ exports.onReviewLikeCreated = onDocumentCreated(
         likesCount: admin.firestore.FieldValue.increment(1),
       });
       console.log(`Incremented likesCount for rating ${event.params.ratingId}`);
+
+      // Send push notification to the rating owner
+      const likeData = event.data.data();
+      const ratingDoc = await ratingRef.get();
+      if (!ratingDoc.exists) return;
+
+      const ratingData = ratingDoc.data();
+      const ratingOwnerId = ratingData.userId;
+      const likerId = likeData.userId;
+
+      // Don't notify if the user liked their own rating
+      if (ratingOwnerId === likerId) {
+        console.log("User liked their own rating, skipping notification");
+        return;
+      }
+
+      const ownerDoc = await admin.firestore().collection("users").doc(ratingOwnerId).get();
+      if (!ownerDoc.exists) return;
+
+      const ownerData = ownerDoc.data();
+      const fcmTokens = ownerData.fcmTokens || [];
+      if (fcmTokens.length === 0) {
+        console.log(`No FCM tokens for rating owner ${ratingOwnerId}`);
+        return;
+      }
+
+      const likerName = likeData.username || "Someone";
+      const itemName = ratingData.name || "your rating";
+      const hasReview = ratingData.reviewContent && ratingData.reviewContent.trim() !== "";
+      const itemLabel = hasReview ? "review" : "rating";
+      const notificationBody = `${likerName} liked your ${itemLabel} of ${itemName}`;
+
+      const notifications = fcmTokens.map(async (token) => {
+        try {
+          await admin.messaging().send({
+            token: token,
+            notification: {
+              title: "New Like",
+              body: notificationBody,
+            },
+            data: {
+              type: "like",
+              ratingId: event.params.ratingId,
+              spotifyId: ratingData.spotifyId || "",
+              itemType: ratingData.type || "",
+              itemName: ratingData.name || "",
+              artistName: ratingData.artistName || "",
+              imageURL: ratingData.imageURL || "",
+              hasReviewContent: hasReview ? "true" : "false",
+              likerId: likerId,
+            },
+            apns: {
+              payload: {
+                aps: {
+                  sound: "default",
+                },
+              },
+            },
+          });
+          console.log(`Like notification sent to token: ${token.substring(0, 20)}...`);
+        } catch (error) {
+          console.error(`Error sending like notification: ${error.message}`);
+          if (error.code === "messaging/invalid-registration-token" ||
+              error.code === "messaging/registration-token-not-registered") {
+            await admin.firestore().collection("users").doc(ratingOwnerId).update({
+              fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
+            });
+          }
+        }
+      });
+      await Promise.all(notifications);
+      console.log(`Like notification sent to rating owner ${ratingOwnerId}`);
     } catch (error) {
-      console.error("Error incrementing likesCount:", error);
+      console.error("Error in onReviewLikeCreated:", error);
     }
   }
 );
@@ -434,8 +506,84 @@ exports.onReviewCommentCreated = onDocumentCreated(
         commentsCount: admin.firestore.FieldValue.increment(1),
       });
       console.log(`Incremented commentsCount for rating ${event.params.ratingId}`);
+
+      // Send push notification to the rating owner
+      const commentData = event.data.data();
+      const ratingDoc = await ratingRef.get();
+      if (!ratingDoc.exists) return;
+
+      const ratingData = ratingDoc.data();
+      const ratingOwnerId = ratingData.userId;
+      const commenterId = commentData.userId;
+
+      // Don't notify if the user commented on their own rating
+      if (ratingOwnerId === commenterId) {
+        console.log("User commented on their own rating, skipping notification");
+        return;
+      }
+
+      const ownerDoc = await admin.firestore().collection("users").doc(ratingOwnerId).get();
+      if (!ownerDoc.exists) return;
+
+      const ownerData = ownerDoc.data();
+      const fcmTokens = ownerData.fcmTokens || [];
+      if (fcmTokens.length === 0) {
+        console.log(`No FCM tokens for rating owner ${ratingOwnerId}`);
+        return;
+      }
+
+      const commenterName = commentData.username || "Someone";
+      const itemName = ratingData.name || "your rating";
+      const hasReview = ratingData.reviewContent && ratingData.reviewContent.trim() !== "";
+      const itemLabel = hasReview ? "review" : "rating";
+      const commentPreview = commentData.content && commentData.content.length > 50
+        ? commentData.content.substring(0, 50) + "..."
+        : commentData.content || "";
+      const notificationBody = `${commenterName} commented on your ${itemLabel} of ${itemName}: "${commentPreview}"`;
+
+      const notifications = fcmTokens.map(async (token) => {
+        try {
+          await admin.messaging().send({
+            token: token,
+            notification: {
+              title: "New Comment",
+              body: notificationBody,
+            },
+            data: {
+              type: "comment",
+              ratingId: event.params.ratingId,
+              commentId: event.params.commentId,
+              spotifyId: ratingData.spotifyId || "",
+              itemType: ratingData.type || "",
+              itemName: ratingData.name || "",
+              artistName: ratingData.artistName || "",
+              imageURL: ratingData.imageURL || "",
+              hasReviewContent: hasReview ? "true" : "false",
+              commenterId: commenterId,
+            },
+            apns: {
+              payload: {
+                aps: {
+                  sound: "default",
+                },
+              },
+            },
+          });
+          console.log(`Comment notification sent to token: ${token.substring(0, 20)}...`);
+        } catch (error) {
+          console.error(`Error sending comment notification: ${error.message}`);
+          if (error.code === "messaging/invalid-registration-token" ||
+              error.code === "messaging/registration-token-not-registered") {
+            await admin.firestore().collection("users").doc(ratingOwnerId).update({
+              fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
+            });
+          }
+        }
+      });
+      await Promise.all(notifications);
+      console.log(`Comment notification sent to rating owner ${ratingOwnerId}`);
     } catch (error) {
-      console.error("Error incrementing commentsCount:", error);
+      console.error("Error in onReviewCommentCreated:", error);
     }
   }
 );

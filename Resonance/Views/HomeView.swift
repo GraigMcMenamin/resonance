@@ -164,6 +164,11 @@ struct HomeView: View {
             print("[HomeView] Appeared, updating charts...")
             updateCharts()
             loadPendingRecommendations()
+            
+            // Consume the home page deep link if set
+            if case .homePage = notificationManager.pendingDeepLink {
+                notificationManager.pendingDeepLink = nil
+            }
         }
         .refreshable {
             loadPendingRecommendations()

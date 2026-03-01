@@ -49,8 +49,9 @@ struct ResonanceApp: App {
     }
     
     private func setupNotifications() {
-        // Initialize notification manager with firebase service
+        // Initialize notification manager with firebase service and buddy manager
         notificationManager.initialize(firebaseService: firebaseService)
+        notificationManager.setBuddyManager(buddyManager)
         
         // Set delegates for FCM and notifications
         Messaging.messaging().delegate = notificationManager

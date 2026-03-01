@@ -250,11 +250,7 @@ struct SongDetailView: View {
                         selectedItem = .track(track)
                     }
                 }) {
-                    HStack(spacing: 6) {
-                        Text("%")
-                            .fontWeight(.bold)
-                        Text(hasUserRating ? "update" : "rate & review")
-                    }
+                    Text(hasUserRating ? "edit review" : "review")
                     .font(.subheadline)
                     .foregroundColor(.white)
                     .padding(.horizontal, 16)
@@ -307,7 +303,7 @@ struct SongDetailView: View {
             }
             
             // Buddy Ratings Section
-            BuddyRatingsSection(buddyRatings: buddyRatings, buddies: buddies)
+            BuddyRatingsSection(buddyRatings: buddyRatings, buddies: buddies, userRating: getUserRating())
         }
         .padding(.horizontal)
     }

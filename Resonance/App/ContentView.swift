@@ -80,7 +80,9 @@ struct ContentView: View {
 struct AuthenticatedView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
+    @EnvironmentObject var notificationManager: NotificationManager
     @StateObject private var ratingsManager: RatingsManager
+    @State private var selectedTab: Int = 0
     
     init(firebaseService: FirebaseService) {
         _ratingsManager = StateObject(wrappedValue: RatingsManager(firebaseService: firebaseService))
@@ -92,28 +94,41 @@ struct AuthenticatedView: View {
             Color(red: 0.15, green: 0.08, blue: 0.18)
                 .ignoresSafeArea()
             
-            TabView {
+            TabView(selection: $selectedTab) {
                 HomeView()
                     .tabItem {
                         Label("home", systemImage: "house.fill")
                     }
+                    .tag(0)
                 
                 LibraryView()
                     .tabItem {
                         Label("buddies & me", systemImage: "music.note.list")
                     }
+                    .tag(1)
                 
                 SearchView()
                     .tabItem {
                         Label("search", systemImage: "magnifyingglass")
                     }
+                    .tag(2)
                 
                 ProfileView()
                     .tabItem {
                         Label("profile", systemImage: "person.fill")
                     }
+                    .tag(3)
             }
             .environmentObject(ratingsManager)
+        }
+        .onChange(of: notificationManager.pendingDeepLink) { deepLink in
+            guard let deepLink = deepLink else { return }
+            switch deepLink {
+            case .homePage:
+                selectedTab = 0
+            case .buddyRatingFeed, .reviewsList:
+                selectedTab = 1
+            }
         }
         .task {
             // Load user ratings when authenticated (not in guest mode)
