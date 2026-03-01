@@ -7,7 +7,9 @@
 
 import Foundation
 import FirebaseFirestore
+import FirebaseStorage
 import Combine
+import UIKit
 
 // MARK: - Array Extension for Chunking
 
@@ -321,6 +323,182 @@ class FirebaseService: ObservableObject {
         }
     }
     
+    // MARK: - Profile Image Upload
+    
+    /// Uploads a profile image to Firebase Storage and returns the download URL
+    func uploadProfileImage(_ image: UIImage, userId: String) async throws -> String {
+        // Resize image to max 512x512 to keep storage reasonable
+        let resized = resizeImage(image, maxDimension: 512)
+        
+        guard let imageData = resized.jpegData(compressionQuality: 0.7) else {
+            throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to data"])
+        }
+        
+        let storageRef = Storage.storage().reference()
+        let profileImageRef = storageRef.child("profile_images/\(userId).jpg")
+        
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        
+        _ = try await profileImageRef.putDataAsync(imageData, metadata: metadata)
+        let downloadURL = try await profileImageRef.downloadURL()
+        
+        let urlString = downloadURL.absoluteString
+        
+        // Update the user's customImageURL in Firestore
+        try await db.collection("users").document(userId).updateData([
+            "customImageURL": urlString
+        ])
+        
+        // Propagate new image to all existing ratings, reviews, comments, etc.
+        await propagateProfileImageUpdate(userId: userId, newImageURL: urlString)
+        
+        print("[FirebaseService] Profile image uploaded for user: \(userId)")
+        return urlString
+    }
+    
+    /// Removes the custom profile image, reverting to Spotify image
+    func removeCustomProfileImage(userId: String) async throws {
+        let storageRef = Storage.storage().reference()
+        let profileImageRef = storageRef.child("profile_images/\(userId).jpg")
+        
+        // Delete from Storage (ignore error if file doesn't exist)
+        do {
+            try await profileImageRef.delete()
+        } catch {
+            print("[FirebaseService] No existing profile image to delete: \(error.localizedDescription)")
+        }
+        
+        // Remove customImageURL from Firestore
+        try await db.collection("users").document(userId).updateData([
+            "customImageURL": FieldValue.delete()
+        ])
+        
+        // Get the user's Spotify image to revert to
+        let userDoc = try await db.collection("users").document(userId).getDocument()
+        let spotifyImageURL = userDoc.data()?["imageURL"] as? String
+        
+        // Propagate reverted image to all existing ratings, reviews, comments, etc.
+        await propagateProfileImageUpdate(userId: userId, newImageURL: spotifyImageURL)
+        
+        print("[FirebaseService] Custom profile image removed for user: \(userId)")
+    }
+    
+    /// Updates userImageURL across all ratings, review comments, review likes, recommendations, and buddy records for a user
+    private func propagateProfileImageUpdate(userId: String, newImageURL: String?) async {
+        // 1. Update all ratings by this user
+        do {
+            let ratingsSnapshot = try await db.collection("ratings")
+                .whereField("userId", isEqualTo: userId)
+                .getDocuments()
+            
+            // Batch in groups of 500 (Firestore batch limit)
+            for chunk in ratingsSnapshot.documents.chunked(into: 500) {
+                let batch = db.batch()
+                for doc in chunk {
+                    batch.updateData(["userImageURL": newImageURL as Any], forDocument: doc.reference)
+                }
+                try await batch.commit()
+            }
+            
+            // Update in-memory ratings
+            for i in allRatings.indices {
+                if allRatings[i].userId == userId {
+                    allRatings[i].userImageURL = newImageURL
+                }
+            }
+            
+            // 2. Update comments and likes in subcollections of each rating
+            for doc in ratingsSnapshot.documents {
+                // Update comments by this user
+                let commentsSnapshot = try await doc.reference.collection("comments")
+                    .whereField("userId", isEqualTo: userId)
+                    .getDocuments()
+                for commentDoc in commentsSnapshot.documents {
+                    try await commentDoc.reference.updateData(["userImageURL": newImageURL as Any])
+                }
+                
+                // Update likes by this user
+                let likesSnapshot = try await doc.reference.collection("likes")
+                    .whereField("userId", isEqualTo: userId)
+                    .getDocuments()
+                for likeDoc in likesSnapshot.documents {
+                    try await likeDoc.reference.updateData(["userImageURL": newImageURL as Any])
+                }
+            }
+            
+            print("[FirebaseService] Updated \(ratingsSnapshot.documents.count) ratings with new profile image")
+        } catch {
+            print("[FirebaseService] Failed to update ratings images: \(error)")
+        }
+        
+        // 3. Update recommendations where this user is the sender
+        do {
+            let sentSnapshot = try await db.collection("recommendations")
+                .whereField("senderId", isEqualTo: userId)
+                .getDocuments()
+            for doc in sentSnapshot.documents {
+                try await doc.reference.updateData(["senderImageURL": newImageURL as Any])
+            }
+            print("[FirebaseService] Updated \(sentSnapshot.documents.count) sent recommendations")
+        } catch {
+            print("[FirebaseService] Failed to update sent recommendation images: \(error)")
+        }
+        
+        // 4. Update recommendations where this user is the receiver
+        do {
+            let receivedSnapshot = try await db.collection("recommendations")
+                .whereField("receiverId", isEqualTo: userId)
+                .getDocuments()
+            for doc in receivedSnapshot.documents {
+                try await doc.reference.updateData(["receiverImageURL": newImageURL as Any])
+            }
+            print("[FirebaseService] Updated \(receivedSnapshot.documents.count) received recommendations")
+        } catch {
+            print("[FirebaseService] Failed to update received recommendation images: \(error)")
+        }
+        
+        // 5. Update comments on OTHER users' ratings (not just own)
+        // We need to search across all ratings for comments by this user
+        do {
+            // Get all ratings (not just this user's) — use collectionGroup for subcollection queries
+            let allCommentsSnapshot = try await db.collectionGroup("comments")
+                .whereField("userId", isEqualTo: userId)
+                .getDocuments()
+            for doc in allCommentsSnapshot.documents {
+                try await doc.reference.updateData(["userImageURL": newImageURL as Any])
+            }
+            
+            let allLikesSnapshot = try await db.collectionGroup("likes")
+                .whereField("userId", isEqualTo: userId)
+                .getDocuments()
+            for doc in allLikesSnapshot.documents {
+                try await doc.reference.updateData(["userImageURL": newImageURL as Any])
+            }
+            
+            print("[FirebaseService] Updated comments/likes across all ratings")
+        } catch {
+            print("[FirebaseService] Failed to update cross-rating comments/likes: \(error)")
+        }
+        
+        print("[FirebaseService] Profile image propagation complete for user: \(userId)")
+    }
+    
+    private func resizeImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let size = image.size
+        let maxSide = max(size.width, size.height)
+        
+        guard maxSide > maxDimension else { return image }
+        
+        let scale = maxDimension / maxSide
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+    
     // MARK: - Statistics
     
     func getTopRatedItems(type: UserRating.RatingType, limit: Int = 10) -> [AggregatedRating] {
@@ -410,9 +588,9 @@ class FirebaseService: ObservableObject {
             fromUserId: fromUser.id,
             toUserId: toUser.id,
             fromUsername: fromUser.username ?? "User",
-            fromImageURL: fromUser.imageURL,
+            fromImageURL: fromUser.displayImageURL,
             toUsername: toUser.username,
-            toImageURL: toUser.imageURL,
+            toImageURL: toUser.displayImageURL,
             status: .pending,
             createdAt: Date()
         )
@@ -709,7 +887,7 @@ class FirebaseService: ObservableObject {
             reviewId: reviewId,
             userId: user.id,
             username: user.username,
-            userImageURL: user.imageURL,
+            userImageURL: user.displayImageURL,
             createdAt: Date()
         )
         
@@ -781,7 +959,7 @@ class FirebaseService: ObservableObject {
             reviewId: reviewId,
             userId: user.id,
             username: user.username,
-            userImageURL: user.imageURL,
+            userImageURL: user.displayImageURL,
             content: content,
             createdAt: Date()
         )

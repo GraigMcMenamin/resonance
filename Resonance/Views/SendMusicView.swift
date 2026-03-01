@@ -265,7 +265,7 @@ struct SendMusicView: View {
                     senderId: currentUser.id,
                     receiverId: buddy.id,
                     senderUsername: currentUser.username,
-                    senderImageURL: currentUser.imageURL,
+                    senderImageURL: currentUser.displayImageURL,
                     receiverUsername: buddy.username,
                     receiverImageURL: buddy.imageURL,
                     spotifyId: musicItem.spotifyId,

@@ -38,12 +38,12 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated() && 
                                resource.data.userId == request.auth.uid;
       
-      // Likes subcollection - anyone can read, users can like/unlike
+      // Likes subcollection - anyone can read, users can like/unlike/update own
       match /likes/{likeId} {
         allow read: if isAuthenticated();
         allow create: if isAuthenticated() && 
                         request.resource.data.userId == request.auth.uid;
-        allow delete: if isAuthenticated() && 
+        allow update, delete: if isAuthenticated() && 
                         resource.data.userId == request.auth.uid;
       }
       
@@ -55,12 +55,12 @@ service cloud.firestore {
         allow update, delete: if isAuthenticated() && 
                                  resource.data.userId == request.auth.uid;
         
-        // Comment Likes subcollection - anyone can read, users can like/unlike
+        // Comment Likes subcollection - anyone can read, users can like/unlike/update own
         match /likes/{likeId} {
           allow read: if isAuthenticated();
           allow create: if isAuthenticated() && 
                           request.resource.data.userId == request.auth.uid;
-          allow delete: if isAuthenticated() && 
+          allow update, delete: if isAuthenticated() && 
                           resource.data.userId == request.auth.uid;
         }
       }
@@ -74,12 +74,12 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated() && 
                                resource.data.userId == request.auth.uid;
       
-      // Likes subcollection - anyone can read, users can like/unlike
+      // Likes subcollection - anyone can read, users can like/unlike/update own
       match /likes/{likeId} {
         allow read: if isAuthenticated();
         allow create: if isAuthenticated() && 
                         request.resource.data.userId == request.auth.uid;
-        allow delete: if isAuthenticated() && 
+        allow update, delete: if isAuthenticated() && 
                         resource.data.userId == request.auth.uid;
       }
       
@@ -91,12 +91,12 @@ service cloud.firestore {
         allow update, delete: if isAuthenticated() && 
                                  resource.data.userId == request.auth.uid;
         
-        // Comment Likes subcollection - anyone can read, users can like/unlike
+        // Comment Likes subcollection - anyone can read, users can like/unlike/update own
         match /likes/{likeId} {
           allow read: if isAuthenticated();
           allow create: if isAuthenticated() && 
                           request.resource.data.userId == request.auth.uid;
-          allow delete: if isAuthenticated() && 
+          allow update, delete: if isAuthenticated() && 
                           resource.data.userId == request.auth.uid;
         }
       }

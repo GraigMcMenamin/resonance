@@ -724,7 +724,7 @@ struct UserListView: View {
                 NavigationLink(destination: OtherUserProfileView(user: user)) {
                     HStack(spacing: 12) {
                         // Profile Image
-                        if let imageURLString = user.imageURL, let imageURL = URL(string: imageURLString) {
+                        if let imageURLString = user.displayImageURL, let imageURL = URL(string: imageURLString) {
                             AsyncImage(url: imageURL) { image in
                                 image
                                     .resizable()

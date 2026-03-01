@@ -531,7 +531,7 @@ struct RatingSheet: View {
             percentage: Int(percentage),
             dateRated: Date(),
             username: user.username,
-            userImageURL: user.imageURL,
+            userImageURL: user.displayImageURL,
             reviewContent: hasReview ? trimmedContent : nil,
             reviewDateCreated: hasReview ? (existingReview?.dateCreated ?? Date()) : nil,
             reviewDateUpdated: (hasReview && existingReview != nil) ? Date() : nil

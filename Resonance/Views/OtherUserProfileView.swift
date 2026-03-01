@@ -17,8 +17,14 @@ struct OtherUserProfileView: View {
     @State private var buddyStatus: FirebaseService.BuddyStatus = .notBuddies
     @State private var isLoadingBuddyStatus = true
     @State private var isSendingRequest = false
+    @State private var fetchedUser: AppUser?
     
     let user: AppUser
+    
+    /// Use fetched user data (which includes customImageURL) if available, otherwise fall back to passed-in user
+    private var displayUser: AppUser {
+        fetchedUser ?? user
+    }
     
     var body: some View {
         ZStack {
@@ -87,6 +93,10 @@ struct OtherUserProfileView: View {
             viewModel.initialize(firebaseService: firebaseService)
             Task {
                 await viewModel.loadUserData(userId: user.id)
+                // Fetch full user profile to get customImageURL
+                if let fullUser = try? await firebaseService.getUserProfile(userId: user.id) {
+                    fetchedUser = fullUser
+                }
             }
             
             // Check buddy status
@@ -330,7 +340,7 @@ struct OtherUserProfileView: View {
         VStack(spacing: 16) {
             // Profile Image
             GeometryReader { geometry in
-                if let imageURLString = user.imageURL,
+                if let imageURLString = displayUser.displayImageURL,
                    let imageURL = URL(string: imageURLString) {
                     AsyncImage(url: imageURL) { image in
                         image

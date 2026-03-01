@@ -10,6 +10,7 @@
 		1A8524552F1B0D3700A68F3D /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 1A8524542F1B0D3700A68F3D /* FirebaseAuth */; };
 		1A8524572F1B0D3700A68F3D /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 1A8524562F1B0D3700A68F3D /* FirebaseFirestore */; };
 		1A8524592F1B0D3700A68F3D /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 1A8524582F1B0D3700A68F3D /* FirebaseMessaging */; };
+		1A85245B2F1B0D3700A68F3D /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 1A85245A2F1B0D3700A68F3D /* FirebaseStorage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,6 +46,7 @@
 				1A8524552F1B0D3700A68F3D /* FirebaseAuth in Frameworks */,
 				1A8524572F1B0D3700A68F3D /* FirebaseFirestore in Frameworks */,
 				1A8524592F1B0D3700A68F3D /* FirebaseMessaging in Frameworks */,
+				1A85245B2F1B0D3700A68F3D /* FirebaseStorage in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -89,6 +91,7 @@
 			packageProductDependencies = (
 				1A8524542F1B0D3700A68F3D /* FirebaseAuth */,
 				1A8524562F1B0D3700A68F3D /* FirebaseFirestore */,
+				1A85245A2F1B0D3700A68F3D /* FirebaseStorage */,
 			);
 			productName = SENTS;
 			productReference = 1A923E772F1588BC004F8127 /* Resonance.app */;
@@ -279,7 +282,7 @@
 				CODE_SIGN_ENTITLEMENTS = Resonance/Resonance.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = XDNU6TQ74G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -293,7 +296,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sloane.resonance;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -315,7 +318,7 @@
 				CODE_SIGN_ENTITLEMENTS = Resonance/Resonance.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = XDNU6TQ74G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -329,7 +332,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sloane.resonance;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -392,6 +395,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 1A8524532F1B0D3700A68F3D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;
+		};
+		1A85245A2F1B0D3700A68F3D /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1A8524532F1B0D3700A68F3D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

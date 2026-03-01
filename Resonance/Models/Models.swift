@@ -209,6 +209,7 @@ struct AppUser: Codable, Identifiable {
     // Common fields
     var email: String?
     var imageURL: String?
+    var customImageURL: String? // User-uploaded profile picture (takes priority over Spotify image)
     var createdAt: Date = Date()
     
     // Auth method tracking
@@ -216,6 +217,11 @@ struct AppUser: Codable, Identifiable {
     
     // Push notification tokens (FCM)
     var fcmTokens: [String]?
+    
+    // Computed property: custom image takes priority over Spotify image
+    var displayImageURL: String? {
+        return customImageURL ?? imageURL
+    }
     
     enum AuthMethod: String, Codable {
         case spotify
@@ -225,7 +231,7 @@ struct AppUser: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, firebaseUID, username, usernameLowercase
         case spotifyId, spotifyAccessToken, spotifyRefreshToken, tokenExpirationDate
-        case email, imageURL, createdAt, authMethod, fcmTokens
+        case email, imageURL, customImageURL, createdAt, authMethod, fcmTokens
     }
 }
 

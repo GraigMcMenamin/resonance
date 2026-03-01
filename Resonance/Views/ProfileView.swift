@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import PhotosUI
 
 struct ProfileView: View {
     @EnvironmentObject var ratingsManager: RatingsManager
@@ -16,6 +17,12 @@ struct ProfileView: View {
     @EnvironmentObject var spotifyService: SpotifyService
     @StateObject private var viewModel = ProfileViewModel()
     @State private var selectedPickerType: TopItemType?
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var isUploadingImage = false
+    @State private var showImageOptions = false
+    @State private var showRemoveConfirmation = false
+    @State private var showPhotoPicker = false
+    @State private var imageToCrop: UIImage?
     
     var body: some View {
         NavigationView {
@@ -71,6 +78,23 @@ struct ProfileView: View {
             .sheet(item: $selectedPickerType) { type in
                 TopItemPicker(viewModel: viewModel, itemType: type)
                     .environmentObject(spotifyService)
+            }
+            .fullScreenCover(item: Binding(
+                get: { imageToCrop.map { IdentifiableImage(image: $0) } },
+                set: { if $0 == nil { imageToCrop = nil } }
+            )) { identifiable in
+                ImageCropperView(
+                    image: identifiable.image,
+                    onCropped: { croppedImage in
+                        imageToCrop = nil
+                        Task {
+                            await uploadCroppedImage(croppedImage)
+                        }
+                    },
+                    onCancel: {
+                        imageToCrop = nil
+                    }
+                )
             }
             .onAppear {
                 viewModel.initialize(firebaseService: firebaseService)
@@ -152,16 +176,28 @@ struct ProfileView: View {
                 // Authenticated User Profile
                 // Profile Image - full width square like album covers
                 GeometryReader { geometry in
-                    if let imageURLString = authManager.currentUser?.imageURL,
-                       let imageURL = URL(string: imageURLString) {
-                        AsyncImage(url: imageURL) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: geometry.size.width, height: geometry.size.width)
-                                .cornerRadius(12)
-                                .shadow(color: .black.opacity(0.3), radius: 15)
-                        } placeholder: {
+                    ZStack(alignment: .bottomTrailing) {
+                        if let imageURLString = authManager.currentUser?.displayImageURL,
+                           let imageURL = URL(string: imageURLString) {
+                            AsyncImage(url: imageURL) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: geometry.size.width, height: geometry.size.width)
+                                    .clipped()
+                                    .cornerRadius(12)
+                                    .shadow(color: .black.opacity(0.3), radius: 15)
+                            } placeholder: {
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.gray.opacity(0.3))
+                                    .frame(width: geometry.size.width, height: geometry.size.width)
+                                    .overlay(
+                                        Image(systemName: "person.fill")
+                                            .font(.system(size: 60))
+                                            .foregroundColor(.white.opacity(0.5))
+                                    )
+                            }
+                        } else {
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(Color.gray.opacity(0.3))
                                 .frame(width: geometry.size.width, height: geometry.size.width)
@@ -171,19 +207,73 @@ struct ProfileView: View {
                                         .foregroundColor(.white.opacity(0.5))
                                 )
                         }
-                    } else {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: geometry.size.width, height: geometry.size.width)
-                            .overlay(
-                                Image(systemName: "person.fill")
-                                    .font(.system(size: 60))
-                                    .foregroundColor(.white.opacity(0.5))
-                            )
+                        
+                        // Upload overlay
+                        if isUploadingImage {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.black.opacity(0.5))
+                                .frame(width: geometry.size.width, height: geometry.size.width)
+                                .overlay(
+                                    ProgressView()
+                                        .tint(.white)
+                                        .scaleEffect(1.5)
+                                )
+                        }
+                        
+                        // Camera button overlay
+                        Button(action: {
+                            if authManager.currentUser?.customImageURL != nil {
+                                showImageOptions = true
+                            } else {
+                                showPhotoPicker = true
+                            }
+                        }) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white)
+                                .frame(width: 36, height: 36)
+                                .background(Color(red: 0.15, green: 0.08, blue: 0.18).opacity(0.9))
+                                .clipShape(Circle())
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                )
+                        }
+                        .padding(12)
                     }
                 }
                 .aspectRatio(1, contentMode: .fit)
                 .padding(.horizontal, 16)
+                .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItem, matching: .images)
+                .confirmationDialog("Profile Picture", isPresented: $showImageOptions, titleVisibility: .visible) {
+                    Button("Choose from Library") {
+                        showPhotoPicker = true
+                    }
+                    if authManager.currentUser?.customImageURL != nil {
+                        Button("Remove Custom Photo", role: .destructive) {
+                            showRemoveConfirmation = true
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                }
+                .alert("Remove Custom Photo?", isPresented: $showRemoveConfirmation) {
+                    Button("Remove", role: .destructive) {
+                        Task {
+                            await removeCustomImage()
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This will revert to your Spotify profile picture.")
+                }
+                .onChange(of: selectedPhotoItem) { newItem in
+                    if let newItem = newItem {
+                        Task {
+                            await loadImageForCropping(newItem)
+                            selectedPhotoItem = nil
+                        }
+                    }
+                }
             
             // Username
             if let username = authManager.currentUser?.username {
@@ -656,6 +746,51 @@ struct ProfileView: View {
         .background(Color.white.opacity(0.03))
         .cornerRadius(8)
     }
+    
+    // MARK: - Profile Image Helpers
+    
+    private func loadImageForCropping(_ item: PhotosPickerItem) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                print("[ProfileView] Failed to load image data")
+                return
+            }
+            imageToCrop = image
+        } catch {
+            print("[ProfileView] Failed to load image: \(error)")
+        }
+    }
+    
+    private func uploadCroppedImage(_ image: UIImage) async {
+        isUploadingImage = true
+        defer { isUploadingImage = false }
+        
+        guard let userId = authManager.currentUser?.id else { return }
+        
+        do {
+            let downloadURL = try await firebaseService.uploadProfileImage(image, userId: userId)
+            authManager.currentUser?.customImageURL = downloadURL
+            print("[ProfileView] Profile image updated successfully")
+        } catch {
+            print("[ProfileView] Failed to upload profile image: \(error)")
+        }
+    }
+    
+    private func removeCustomImage() async {
+        isUploadingImage = true
+        defer { isUploadingImage = false }
+        
+        guard let userId = authManager.currentUser?.id else { return }
+        
+        do {
+            try await firebaseService.removeCustomProfileImage(userId: userId)
+            authManager.currentUser?.customImageURL = nil
+            print("[ProfileView] Custom profile image removed")
+        } catch {
+            print("[ProfileView] Failed to remove custom image: \(error)")
+        }
+    }
 }
 
 // MARK: - Top Item Picker
@@ -1042,6 +1177,12 @@ class ProfileViewModel: ObservableObject {
 }
 
 // MARK: - Models
+
+/// Wrapper to make UIImage work with .fullScreenCover(item:)
+struct IdentifiableImage: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
 
 enum TopItemType: Identifiable {
     case artist, track, album
