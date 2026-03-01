@@ -146,6 +146,8 @@ struct LibraryView: View {
             }
         case .homePage:
             break
+        case .profilePage:
+            break
         }
     }
     

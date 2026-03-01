@@ -12,6 +12,7 @@ import FirebaseFirestore
 struct OtherUserProfileView: View {
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var authManager: AuthenticationManager
+    @EnvironmentObject var buddyManager: BuddyManager
     @StateObject private var viewModel = OtherUserProfileViewModel()
     @State private var buddyStatus: FirebaseService.BuddyStatus = .notBuddies
     @State private var isLoadingBuddyStatus = true
@@ -205,11 +206,25 @@ struct OtherUserProfileView: View {
                     .cornerRadius(12)
                     
                 case .buddies:
-                    HStack(spacing: 6) {
+                    HStack(spacing: 10) {
                         Image(systemName: "person.2.fill")
                             .font(.subheadline)
                         Text("you're buddies!")
                             .font(.subheadline)
+                        
+                        Button(action: {
+                            Task {
+                                await removeBuddy()
+                            }
+                        }) {
+                            Text("un-buddy")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.5))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(8)
+                        }
                     }
                     .foregroundColor(.white.opacity(0.7))
                 }
@@ -265,6 +280,11 @@ struct OtherUserProfileView: View {
         } catch {
             print("Error rejecting request: \(error)")
         }
+    }
+    
+    private func removeBuddy() async {
+        await buddyManager.removeBuddy(buddyId: user.id)
+        buddyStatus = .notBuddies
     }
     
     // MARK: - Buddies Section
@@ -350,33 +370,15 @@ struct OtherUserProfileView: View {
                     .foregroundColor(.white.opacity(0.5))
             }
             
-            // Rating Stats
-            HStack(spacing: 20) {
-                VStack(spacing: 4) {
-                    Text("\(viewModel.ratings.count)")
-                        .font(.title3)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                    Text("Ratings")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                
-                if let avgRating = viewModel.averageRating {
-                    Divider()
-                        .frame(height: 30)
-                        .background(Color.white.opacity(0.3))
-                    
-                    VStack(spacing: 4) {
-                        Text("\(Int(avgRating))%")
-                            .font(.title3)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                        Text("Avg. Rating")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                }
+            // Rating count
+            HStack(spacing: 4) {
+                Text("\(viewModel.ratings.count)")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                Text("ratings")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.7))
             }
         }
         .padding()
@@ -714,5 +716,6 @@ class OtherUserProfileViewModel: ObservableObject {
         OtherUserProfileView(user: user)
             .environmentObject(FirebaseService())
             .environmentObject(AuthenticationManager())
+            .environmentObject(BuddyManager())
     }
 }

@@ -8,12 +8,24 @@
 import SwiftUI
 
 struct BuddiesListView: View {
-    let buddies: [Buddy]
-    let title: String
+    @EnvironmentObject var buddyManager: BuddyManager
     
-    init(buddies: [Buddy], title: String = "Buddies") {
-        self.buddies = buddies
+    let externalBuddies: [Buddy]
+    let title: String
+    let allowRemove: Bool
+    
+    @State private var buddyToRemove: Buddy?
+    @State private var showRemoveConfirmation = false
+    
+    init(buddies: [Buddy], title: String = "Buddies", allowRemove: Bool = false) {
+        self.externalBuddies = buddies
         self.title = title
+        self.allowRemove = allowRemove
+    }
+    
+    /// Use live buddyManager list when showing own buddies (so removals update immediately)
+    private var displayedBuddies: [Buddy] {
+        allowRemove ? buddyManager.buddies : externalBuddies
     }
     
     var body: some View {
@@ -21,7 +33,7 @@ struct BuddiesListView: View {
             Color(red: 0.15, green: 0.08, blue: 0.18)
                 .ignoresSafeArea()
             
-            if buddies.isEmpty {
+            if displayedBuddies.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "person.2.fill")
                         .font(.system(size: 60))
@@ -37,11 +49,21 @@ struct BuddiesListView: View {
                 }
             } else {
                 List {
-                    ForEach(buddies) { buddy in
+                    ForEach(displayedBuddies) { buddy in
                         NavigationLink(destination: buddyProfileDestination(buddy: buddy)) {
                             buddyRow(buddy: buddy)
                         }
                         .listRowBackground(Color.white.opacity(0.05))
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if allowRemove {
+                                Button(role: .destructive) {
+                                    buddyToRemove = buddy
+                                    showRemoveConfirmation = true
+                                } label: {
+                                    Label("Remove", systemImage: "person.badge.minus")
+                                }
+                            }
+                        }
                     }
                 }
                 .listStyle(.plain)
@@ -50,6 +72,22 @@ struct BuddiesListView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(
+            "Remove \(buddyToRemove.flatMap { $0.username }.map { "@\($0)" } ?? "this buddy")?",
+            isPresented: $showRemoveConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) {
+                if let buddy = buddyToRemove {
+                    Task {
+                        await buddyManager.removeBuddy(buddyId: buddy.id)
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("They will no longer appear in your buddies list.")
+        }
     }
     
     @ViewBuilder
@@ -114,5 +152,6 @@ struct BuddiesListView: View {
 #Preview {
     NavigationView {
         BuddiesListView(buddies: [])
+            .environmentObject(BuddyManager())
     }
 }

@@ -20,6 +20,8 @@ enum NotificationDeepLink: Equatable {
     case reviewsList(spotifyId: String, itemName: String, artistName: String?, imageURL: String?, itemType: String, scrollToReviewId: String?)
     /// Navigate to home page (for recommendation notifications)
     case homePage
+    /// Navigate to profile page (for buddy request notifications)
+    case profilePage
 }
 
 @MainActor
@@ -164,6 +166,8 @@ class NotificationManager: NSObject, ObservableObject {
             handleLikeTap(userInfo)
         case "comment":
             handleCommentTap(userInfo)
+        case "buddy_request":
+            handleBuddyRequestTap(userInfo)
         default:
             print("Unknown notification type: \(type)")
         }
@@ -174,6 +178,11 @@ class NotificationManager: NSObject, ObservableObject {
     private func handleRecommendationTap(_ userInfo: [AnyHashable: Any]) {
         // Music sent to you → open on home page
         pendingDeepLink = .homePage
+    }
+    
+    private func handleBuddyRequestTap(_ userInfo: [AnyHashable: Any]) {
+        // Buddy request → navigate to profile page to accept/reject
+        pendingDeepLink = .profilePage
     }
     
     private func handleBuddyRatingTap(_ userInfo: [AnyHashable: Any]) {

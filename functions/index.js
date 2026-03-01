@@ -210,6 +210,100 @@ exports.onRecommendationCreated = onDocumentCreated(
 );
 
 /**
+ * Cloud Function: Send push notification when a buddy request is received
+ *
+ * Triggered when a buddyRequests document is created or updated.
+ * Sends a notification only when status transitions to "pending",
+ * which handles both new requests and re-sent requests after removal.
+ */
+exports.onBuddyRequestCreated = onDocumentWritten(
+  "buddyRequests/{requestId}",
+  async (event) => {
+    const newData = event.data?.after?.data();
+    const prevData = event.data?.before?.data();
+
+    // Only notify when status changes TO pending (new doc or re-sent after reject/remove)
+    if (!newData || newData.status !== "pending") {
+      console.log("Not a pending request, skipping");
+      return;
+    }
+    if (prevData && prevData.status === "pending") {
+      console.log("Status was already pending, skipping duplicate notification");
+      return;
+    }
+
+    const { toUserId, fromUsername } = newData;
+
+    console.log(`📬 New buddy request from ${fromUsername} to ${toUserId}`);
+
+    try {
+      const userDoc = await admin.firestore()
+        .collection("users")
+        .doc(toUserId)
+        .get();
+
+      if (!userDoc.exists) {
+        console.log(`User ${toUserId} not found`);
+        return;
+      }
+
+      const userData = userDoc.data();
+      const fcmTokens = userData.fcmTokens || [];
+
+      if (fcmTokens.length === 0) {
+        console.log(`No FCM tokens for user ${toUserId}`);
+        return;
+      }
+
+      const senderName = fromUsername || "Someone";
+      const notificationBody = `@${senderName} wants to be your buddy!`;
+
+      const notifications = fcmTokens.map(async (token) => {
+        try {
+          await admin.messaging().send({
+            token: token,
+            notification: {
+              title: "New Buddy Request",
+              body: notificationBody,
+            },
+            data: {
+              type: "buddy_request",
+              requestId: event.params.requestId,
+              fromUsername: fromUsername || "",
+            },
+            apns: {
+              payload: {
+                aps: {
+                  sound: "default",
+                },
+              },
+            },
+          });
+          console.log(`Buddy request notification sent to token: ${token.substring(0, 20)}...`);
+        } catch (error) {
+          console.error(`Error sending to token: ${error.message}`);
+          if (error.code === "messaging/invalid-registration-token" ||
+              error.code === "messaging/registration-token-not-registered") {
+            console.log(`Removing invalid token: ${token.substring(0, 20)}...`);
+            await admin.firestore()
+              .collection("users")
+              .doc(toUserId)
+              .update({
+                fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
+              });
+          }
+        }
+      });
+
+      await Promise.all(notifications);
+      console.log(`Sent buddy request notifications to ${fcmTokens.length} device(s)`);
+    } catch (error) {
+      console.error("Error in onBuddyRequestCreated:", error);
+    }
+  }
+);
+
+/**
  * Cloud Function: Send push notification when a buddy rates or reviews something
  * 
  * Triggered when a rating document is created or updated in the ratings collection.

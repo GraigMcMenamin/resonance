@@ -123,11 +123,15 @@ struct AuthenticatedView: View {
         }
         .onChange(of: notificationManager.pendingDeepLink) { deepLink in
             guard let deepLink = deepLink else { return }
-            switch deepLink {
-            case .homePage:
-                selectedTab = 0
-            case .buddyRatingFeed, .reviewsList:
-                selectedTab = 1
+            applyDeepLink(deepLink)
+        }
+        .onAppear {
+            // Handle deep link that was set before this view appeared (cold-start tap)
+            if let deepLink = notificationManager.pendingDeepLink {
+                // Small delay to ensure the tab view is fully ready
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    applyDeepLink(deepLink)
+                }
             }
         }
         .task {
@@ -161,6 +165,20 @@ struct AuthenticatedView: View {
                     await ratingsManager.loadUserRatings(userId: userId)
                 }
             }
+        }
+    }
+    
+    private func applyDeepLink(_ deepLink: NotificationDeepLink) {
+        switch deepLink {
+        case .homePage:
+            selectedTab = 0
+            notificationManager.pendingDeepLink = nil
+        case .buddyRatingFeed, .reviewsList:
+            // Switch to the Library tab; LibraryView handles scroll/navigation and clears the link itself
+            selectedTab = 1
+        case .profilePage:
+            selectedTab = 3
+            notificationManager.pendingDeepLink = nil
         }
     }
 }

@@ -198,20 +198,28 @@ struct ProfileView: View {
                     .foregroundColor(.white.opacity(0.5))
             }
             
+            // Ratings count
+            HStack(spacing: 4) {
+                Text("\(ratingsManager.ratings.count)")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                Text("ratings")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            
             // Logout Button
             Button(action: {
                 authManager.logout()
             }) {
-                HStack {
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                    Text("Logout")
-                }
-                .font(.subheadline)
-                .foregroundColor(.white)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .background(Color.red.opacity(0.7))
-                .cornerRadius(20)
+                Text("logout")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(8)
             }
             } // End of authenticated user else block
         }
@@ -480,7 +488,7 @@ struct ProfileView: View {
     
     @ViewBuilder
     private func buddiesSection() -> some View {
-        NavigationLink(destination: BuddiesListView(buddies: buddyManager.buddies, title: "My Buddies")) {
+        NavigationLink(destination: BuddiesListView(buddies: buddyManager.buddies, title: "My Buddies", allowRemove: true)) {
             HStack {
                 Image(systemName: "person.2.fill")
                     .font(.title2)
