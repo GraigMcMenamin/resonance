@@ -99,7 +99,7 @@ struct ProfileView: View {
             .refreshable {
                 if let userId = authManager.currentUser?.id {
                     await buddyManager.refresh()
-                    await ratingsManager.loadUserRatings(userId: userId)
+                    await ratingsManager.refreshUserRatings(userId: userId)
                 }
             }
         }

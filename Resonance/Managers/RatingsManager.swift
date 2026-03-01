@@ -92,6 +92,12 @@ class RatingsManager: ObservableObject {
         }
     }
     
+    /// Force-refreshes by clearing the local cache first, then re-fetching from Firestore.
+    func refreshUserRatings(userId: String) async {
+        firebaseService.invalidateRatingsCache(for: userId)
+        await loadUserRatings(userId: userId)
+    }
+    
     func clearUserRatings() {
         ratings = []
         currentUserId = nil

@@ -44,17 +44,25 @@ struct HomeView: View {
     @State private var showIgnoreConfirmation: MusicRecommendation?
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color(red: 0.15, green: 0.08, blue: 0.18)
-                    .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Pending Recommendations Section
-                        if !pendingRecommendations.isEmpty {
-                            pendingRecommendationsSection
-                        }
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Feedback Link
+                    Link(destination: URL(string: "https://docs.google.com/forms/d/1DQPNJ0vqigU205HToM5ZkG4LtKJgbHYR36NoFwFBrVU/edit")!) {
+                        Text("please submit app feedback here !")
+                            .font(.footnote)
+                            .foregroundColor(Color(red: 0.8, green: 0.6, blue: 1.0))
+                            .underline()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.top, 10)
+                    .padding(.bottom, -10)
+
+                    // Pending Recommendations Section
+                    if !pendingRecommendations.isEmpty {
+                        pendingRecommendationsSection
+                    }
                         
                         // Charts Header with Sort Button
                         HStack {
@@ -119,7 +127,11 @@ struct HomeView: View {
                     .padding(.horizontal)
                     .padding(.bottom, 20)
                 }
-            }
+                .background(Color(red: 0.15, green: 0.08, blue: 0.18).ignoresSafeArea())
+                .refreshable {
+                    updateCharts()
+                    await loadPendingRecommendationsAsync()
+                }
             .navigationTitle("home")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -170,9 +182,6 @@ struct HomeView: View {
                 notificationManager.pendingDeepLink = nil
             }
         }
-        .refreshable {
-            loadPendingRecommendations()
-        }
     }
     
     // MARK: - Pending Recommendations Section
@@ -217,6 +226,10 @@ struct HomeView: View {
     }
     
     private func loadPendingRecommendations() {
+        Task { await loadPendingRecommendationsAsync() }
+    }
+    
+    private func loadPendingRecommendationsAsync() async {
         guard let userId = authManager.currentUser?.id else {
             print("[HomeView] No user ID, skipping recommendation load")
             return
@@ -225,36 +238,34 @@ struct HomeView: View {
         print("[HomeView] Loading recommendations for user: \(userId)")
         print("[HomeView] Current ratings count: \(firebaseService.allRatings.count)")
         
-        Task {
-            do {
-                let allRecommendations = try await firebaseService.getReceivedRecommendations(userId: userId)
-                print("[HomeView] Fetched \(allRecommendations.count) total recommendations")
-                
-                // Debug: print each recommendation
-                for (index, rec) in allRecommendations.enumerated() {
-                    print("  [\(index)] \(rec.itemName) - status: \(rec.status.rawValue), spotifyId: \(rec.spotifyId)")
-                }
-                
-                // Filter to only pending ones (not yet rated by THIS user)
-                // Only check against the CURRENT USER's ratings, not all ratings
-                let myRatings = firebaseService.allRatings.filter { $0.userId == userId }
-                let ratingsSet = Set(myRatings.map { $0.spotifyId })
-                print("[HomeView] Current user's rated spotifyIds: \(ratingsSet)")
-                
-                pendingRecommendations = allRecommendations.filter { rec in
-                    let isPending = rec.status == .pending
-                    let notRated = !ratingsSet.contains(rec.spotifyId)
-                    print("  Filtering \(rec.itemName): isPending=\(isPending), notRated=\(notRated)")
-                    return isPending && notRated
-                }
-                
-                // Update app badge to show pending recommendations count
-                notificationManager.updateBadge(pendingCount: pendingRecommendations.count)
-                
-                print("[HomeView] Loaded \(pendingRecommendations.count) pending recommendations")
-            } catch {
-                print("[HomeView] Error loading recommendations: \(error)")
+        do {
+            let allRecommendations = try await firebaseService.getReceivedRecommendations(userId: userId)
+            print("[HomeView] Fetched \(allRecommendations.count) total recommendations")
+            
+            // Debug: print each recommendation
+            for (index, rec) in allRecommendations.enumerated() {
+                print("  [\(index)] \(rec.itemName) - status: \(rec.status.rawValue), spotifyId: \(rec.spotifyId)")
             }
+            
+            // Filter to only pending ones (not yet rated by THIS user)
+            // Only check against the CURRENT USER's ratings, not all ratings
+            let myRatings = firebaseService.allRatings.filter { $0.userId == userId }
+            let ratingsSet = Set(myRatings.map { $0.spotifyId })
+            print("[HomeView] Current user's rated spotifyIds: \(ratingsSet)")
+            
+            pendingRecommendations = allRecommendations.filter { rec in
+                let isPending = rec.status == .pending
+                let notRated = !ratingsSet.contains(rec.spotifyId)
+                print("  Filtering \(rec.itemName): isPending=\(isPending), notRated=\(notRated)")
+                return isPending && notRated
+            }
+            
+            // Update app badge to show pending recommendations count
+            notificationManager.updateBadge(pendingCount: pendingRecommendations.count)
+            
+            print("[HomeView] Loaded \(pendingRecommendations.count) pending recommendations")
+        } catch {
+            print("[HomeView] Error loading recommendations: \(error)")
         }
     }
     

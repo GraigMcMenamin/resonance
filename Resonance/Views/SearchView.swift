@@ -50,11 +50,7 @@ struct SearchView: View {
                 .padding(.horizontal)
                 
                 // Results
-                if isLoading {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                } else {
+                ZStack {
                     TabView(selection: $selectedTab) {
                         TrackListView(tracks: tracks, selectedItem: $selectedItem, ratingsManager: ratingsManager, userId: authManager.currentUser?.id)
                             .tag(0)
@@ -79,6 +75,13 @@ struct SearchView: View {
                         .tag(4)
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
+                    
+                    if isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color.black.opacity(0.01))
+                            .allowsHitTesting(false)
+                    }
                 }
             }
             .scrollDismissesKeyboard(.interactively)

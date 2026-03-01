@@ -164,6 +164,12 @@ class FirebaseService: ObservableObject {
         ratingsListener = nil
     }
     
+    /// Clears the cached ratings for a specific user so the next fetch hits Firestore directly.
+    func invalidateRatingsCache(for userId: String) {
+        ratingsCache.removeValue(forKey: userId)
+        cacheTimestamp.removeValue(forKey: userId)
+    }
+    
     // MARK: - Rating CRUD Operations
     
     func saveRating(_ rating: UserRating) async throws {

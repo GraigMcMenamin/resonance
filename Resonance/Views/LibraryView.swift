@@ -165,22 +165,25 @@ struct LibraryView: View {
             .pickerStyle(.segmented)
             .padding()
             
-            // Ratings List
-            if filteredRatings.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "star.slash")
-                        .font(.system(size: 60))
-                        .foregroundColor(.gray)
-                    Text("no ratings yet")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    Text("search and rate your favorite music")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxHeight: .infinity)
-            } else {
-                List {
+            // Always use a List so pull-to-refresh works in all states
+            List {
+                if filteredRatings.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "star.slash")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray)
+                        Text("no ratings yet")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        Text("search and rate your favorite music")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 60)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                } else {
                     ForEach(filteredRatings) { rating in
                         NavigationLink(destination: destinationView(for: rating)) {
                             RatingRow(rating: rating)
@@ -188,7 +191,12 @@ struct LibraryView: View {
                     }
                     .onDelete(perform: deleteRatings)
                 }
-                .listStyle(.plain)
+            }
+            .listStyle(.plain)
+            .refreshable {
+                if let userId = authManager.currentUser?.id {
+                    await ratingsManager.refreshUserRatings(userId: userId)
+                }
             }
         }
     }
@@ -202,18 +210,27 @@ struct LibraryView: View {
                 ProgressView("loading activity...")
                 Spacer()
             } else if buddyFeedItems.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: buddyManager.buddies.isEmpty ? "person.2.slash" : "star.slash")
-                        .font(.system(size: 60))
-                        .foregroundColor(.gray)
-                    Text(buddyManager.buddies.isEmpty ? "no buddies yet" : "no activity yet")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    Text(buddyManager.buddies.isEmpty ? "add buddies to see their ratings here" : "rate some music to see your activity here")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                List {
+                    VStack(spacing: 12) {
+                        Image(systemName: buddyManager.buddies.isEmpty ? "person.2.slash" : "star.slash")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray)
+                        Text(buddyManager.buddies.isEmpty ? "no buddies yet" : "no activity yet")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        Text(buddyManager.buddies.isEmpty ? "add buddies to see their ratings here" : "rate some music to see your activity here")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 60)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
-                .frame(maxHeight: .infinity)
+                .listStyle(.plain)
+                .refreshable {
+                    await loadBuddyRatings()
+                }
             } else {
                 ScrollViewReader { proxy in
                     List {
@@ -236,6 +253,9 @@ struct LibraryView: View {
                         }
                     }
                     .listStyle(.plain)
+                    .refreshable {
+                        await loadBuddyRatings()
+                    }
                     .onChange(of: deepLinkScrollToId) { scrollId in
                         if let scrollId = scrollId {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

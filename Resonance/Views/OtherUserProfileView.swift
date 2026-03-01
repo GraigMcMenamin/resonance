@@ -72,6 +72,10 @@ struct OtherUserProfileView: View {
                     }
                     .padding()
                 }
+                .refreshable {
+                    await viewModel.loadUserData(userId: user.id)
+                    await loadBuddyStatus()
+                }
             }
         }
         .navigationTitle(user.username.map { "@\($0)" } ?? "User")
@@ -81,7 +85,9 @@ struct OtherUserProfileView: View {
             print("DEBUG OtherUserProfileView: user.firebaseUID = \(user.firebaseUID)")
             print("DEBUG OtherUserProfileView: user.spotifyId = \(user.spotifyId ?? "nil")")
             viewModel.initialize(firebaseService: firebaseService)
-            viewModel.loadUserData(userId: user.id)
+            Task {
+                await viewModel.loadUserData(userId: user.id)
+            }
             
             // Check buddy status
             Task {
@@ -652,46 +658,44 @@ class OtherUserProfileViewModel: ObservableObject {
         self.firebaseService = firebaseService
     }
     
-    func loadUserData(userId: String) {
+    func loadUserData(userId: String) async {
         isLoading = true
         
         print("DEBUG: Loading data for userId: \(userId)")
         
-        Task {
-            do {
-                // Load top items, ratings, and buddies in parallel
-                async let topItemsTask = firebaseService.getUserTopItems(userId: userId)
-                async let ratingsTask = firebaseService.getUserRatings(userId: userId)
-                async let buddiesTask = firebaseService.getBuddies(forUserId: userId)
-                
-                let (topItems, userRatings, userBuddies) = try await (topItemsTask, ratingsTask, buddiesTask)
-                
-                print("DEBUG: Top items found: \(topItems != nil)")
-                print("DEBUG: Ratings count: \(userRatings.count)")
-                print("DEBUG: Buddies count: \(userBuddies.count)")
-                
-                if let topItems = topItems {
-                    topArtists = topItems.topArtists
-                    topTracks = topItems.topTracks
-                    topAlbums = topItems.topAlbums
-                    print("DEBUG: Top artists: \(topItems.topArtists.count), tracks: \(topItems.topTracks.count), albums: \(topItems.topAlbums.count)")
-                }
-                
-                ratings = userRatings
-                buddies = userBuddies
-                
-                // Calculate average rating
-                if !userRatings.isEmpty {
-                    let total = userRatings.reduce(0) { $0 + $1.percentage }
-                    averageRating = Double(total) / Double(userRatings.count)
-                }
-                
-                isLoading = false
-            } catch {
-                print("Error loading user data: \(error)")
-                errorMessage = "Failed to load user profile"
-                isLoading = false
+        do {
+            // Load top items, ratings, and buddies in parallel
+            async let topItemsTask = firebaseService.getUserTopItems(userId: userId)
+            async let ratingsTask = firebaseService.getUserRatings(userId: userId)
+            async let buddiesTask = firebaseService.getBuddies(forUserId: userId)
+            
+            let (topItems, userRatings, userBuddies) = try await (topItemsTask, ratingsTask, buddiesTask)
+            
+            print("DEBUG: Top items found: \(topItems != nil)")
+            print("DEBUG: Ratings count: \(userRatings.count)")
+            print("DEBUG: Buddies count: \(userBuddies.count)")
+            
+            if let topItems = topItems {
+                topArtists = topItems.topArtists
+                topTracks = topItems.topTracks
+                topAlbums = topItems.topAlbums
+                print("DEBUG: Top artists: \(topItems.topArtists.count), tracks: \(topItems.topTracks.count), albums: \(topItems.topAlbums.count)")
             }
+            
+            ratings = userRatings
+            buddies = userBuddies
+            
+            // Calculate average rating
+            if !userRatings.isEmpty {
+                let total = userRatings.reduce(0) { $0 + $1.percentage }
+                averageRating = Double(total) / Double(userRatings.count)
+            }
+            
+            isLoading = false
+        } catch {
+            print("Error loading user data: \(error)")
+            errorMessage = "Failed to load user profile"
+            isLoading = false
         }
     }
     
