@@ -1,5 +1,5 @@
 //
-//  LibraryView.swift
+//  BuddyBoardView.swift
 //  Resonance
 //
 //  Created by Mcmenamin, Graig on 1/12/26.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct LibraryView: View {
+struct BuddyBoardView: View {
     @EnvironmentObject var ratingsManager: RatingsManager
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var authManager: AuthenticationManager
@@ -756,15 +756,25 @@ struct LibraryBuddyRatingRow: View {
                                     .frame(width: 32, height: 32)
                                     .clipShape(Circle())
                             default:
-                                Image(systemName: "person.circle.fill")
-                                    .font(.system(size: 32))
-                                    .foregroundColor(.gray)
+                                Circle()
+                                    .fill(Color.gray.opacity(0.3))
+                                    .frame(width: 32, height: 32)
+                                    .overlay(
+                                        Image(systemName: "person.fill")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.gray)
+                                    )
                             }
                         }
                     } else {
-                        Image(systemName: "person.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundColor(.gray)
+                        Circle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 32, height: 32)
+                            .overlay(
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.gray)
+                            )
                     }
                 }
                 .buttonStyle(.plain)
@@ -1370,22 +1380,32 @@ struct RecommendationFeedRow: View {
                         .frame(width: 24, height: 24)
                         .clipShape(Circle())
                 default:
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.gray)
+                    Circle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(.gray)
+                        )
                 }
             }
         } else {
-            Image(systemName: "person.circle.fill")
-                .font(.system(size: 24))
-                .foregroundColor(.gray)
+            Circle()
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 24, height: 24)
+                .overlay(
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                )
         }
     }
 }
 
 #Preview {
     let firebaseService = FirebaseService()
-    LibraryView()
+    BuddyBoardView()
         .environmentObject(RatingsManager(firebaseService: firebaseService))
         .environmentObject(firebaseService)
         .environmentObject(AuthenticationManager())

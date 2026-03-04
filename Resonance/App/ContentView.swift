@@ -101,7 +101,7 @@ struct AuthenticatedView: View {
                     }
                     .tag(0)
                 
-                LibraryView()
+                BuddyBoardView()
                     .tabItem {
                         Label("buddies & me", systemImage: "music.note.list")
                     }
@@ -174,7 +174,7 @@ struct AuthenticatedView: View {
             selectedTab = 0
             notificationManager.pendingDeepLink = nil
         case .buddyRatingFeed, .reviewsList:
-            // Switch to the Library tab; LibraryView handles scroll/navigation and clears the link itself
+            // Switch to the BuddyBoard tab; BuddyBoardView handles scroll/navigation and clears the link itself
             selectedTab = 1
         case .profilePage:
             selectedTab = 3

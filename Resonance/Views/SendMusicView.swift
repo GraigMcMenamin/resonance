@@ -24,7 +24,7 @@ struct SendMusicView: View {
     @EnvironmentObject var buddyManager: BuddyManager
     @Environment(\.dismiss) private var dismiss
     
-    @State private var selectedBuddy: Buddy?
+    @State private var selectedBuddies: Set<String> = []
     @State private var message: String = ""
     @State private var isSending = false
     @State private var showSuccess = false
@@ -55,7 +55,7 @@ struct SendMusicView: View {
                     .padding()
                 }
             }
-            .navigationTitle("send to buddy")
+            .navigationTitle("send to buddies")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -78,9 +78,8 @@ struct SendMusicView: View {
                     dismiss()
                 }
             } message: {
-                if let buddy = selectedBuddy {
-                    Text("Sent \(musicItem.name) to @\(buddy.username ?? "user")")
-                }
+                let count = selectedBuddies.count
+                Text("Sent \(musicItem.name) to \(count) \(count == 1 ? "buddy" : "buddies")")
             }
             .onAppear {
                 // Initialize buddy manager if needed
@@ -168,8 +167,14 @@ struct SendMusicView: View {
                     ForEach(buddyManager.buddies) { buddy in
                         BuddySelectRow(
                             buddy: buddy,
-                            isSelected: selectedBuddy?.id == buddy.id,
-                            onSelect: { selectedBuddy = buddy }
+                            isSelected: selectedBuddies.contains(buddy.id),
+                            onSelect: {
+                                if selectedBuddies.contains(buddy.id) {
+                                    selectedBuddies.remove(buddy.id)
+                                } else {
+                                    selectedBuddies.insert(buddy.id)
+                                }
+                            }
                         )
                     }
                 }
@@ -225,7 +230,8 @@ struct SendMusicView: View {
                         .tint(.white)
                 } else {
                     Image(systemName: "paperplane.fill")
-                    Text("Send")
+                    let count = selectedBuddies.count
+                    Text(count > 1 ? "Send to \(count) buddies" : "Send")
                 }
             }
             .font(.headline)
@@ -233,53 +239,52 @@ struct SendMusicView: View {
             .frame(maxWidth: .infinity)
             .padding()
             .background(
-                selectedBuddy != nil && !isSending
+                !selectedBuddies.isEmpty && !isSending
                     ? Color(red: 0.11, green: 0.73, blue: 0.33)
                     : Color.gray.opacity(0.3)
             )
             .cornerRadius(12)
         }
-        .disabled(selectedBuddy == nil || isSending)
+        .disabled(selectedBuddies.isEmpty || isSending)
     }
     
     // MARK: - Send Logic
     
     private func sendRecommendation() {
         guard let currentUser = authManager.currentUser,
-              let buddy = selectedBuddy else { return }
+              !selectedBuddies.isEmpty else { return }
         
         isSending = true
         
         Task {
             do {
-                // Note: We skip the duplicate check to avoid complex Firestore query permissions
-                // The worst case is sending the same item twice, which is acceptable
+                let buddiesToSend = buddyManager.buddies.filter { selectedBuddies.contains($0.id) }
                 
-                // Create recommendation
-                let recommendation = MusicRecommendation(
-                    id: MusicRecommendation.makeId(
+                for buddy in buddiesToSend {
+                    let recommendation = MusicRecommendation(
+                        id: MusicRecommendation.makeId(
+                            senderId: currentUser.id,
+                            receiverId: buddy.id,
+                            spotifyId: musicItem.spotifyId
+                        ),
                         senderId: currentUser.id,
                         receiverId: buddy.id,
-                        spotifyId: musicItem.spotifyId
-                    ),
-                    senderId: currentUser.id,
-                    receiverId: buddy.id,
-                    senderUsername: currentUser.username,
-                    senderImageURL: currentUser.displayImageURL,
-                    receiverUsername: buddy.username,
-                    receiverImageURL: buddy.imageURL,
-                    spotifyId: musicItem.spotifyId,
-                    itemType: musicItem.itemType,
-                    itemName: musicItem.name,
-                    artistName: musicItem.artistName,
-                    imageURL: musicItem.imageURL?.absoluteString,
-                    message: message.isEmpty ? nil : message,
-                    sentAt: Date(),
-                    status: .pending,
-                    receiverRatingId: nil
-                )
-                
-                try await firebaseService.sendMusicRecommendation(recommendation)
+                        senderUsername: currentUser.username,
+                        senderImageURL: currentUser.displayImageURL,
+                        receiverUsername: buddy.username,
+                        receiverImageURL: buddy.imageURL,
+                        spotifyId: musicItem.spotifyId,
+                        itemType: musicItem.itemType,
+                        itemName: musicItem.name,
+                        artistName: musicItem.artistName,
+                        imageURL: musicItem.imageURL?.absoluteString,
+                        message: message.isEmpty ? nil : message,
+                        sentAt: Date(),
+                        status: .pending,
+                        receiverRatingId: nil
+                    )
+                    try await firebaseService.sendMusicRecommendation(recommendation)
+                }
                 
                 isSending = false
                 showSuccess = true

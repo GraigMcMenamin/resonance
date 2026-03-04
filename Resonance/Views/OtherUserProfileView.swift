@@ -386,6 +386,58 @@ struct OtherUserProfileView: View {
                     .foregroundColor(.white.opacity(0.5))
             }
             
+            // Favorite Lyric (read-only)
+            if let lyric = displayUser.favoriteLyric, !lyric.isEmpty {
+                VStack(spacing: 8) {
+                    Text("\"\(lyric)\"")
+                        .font(.subheadline)
+                        .italic()
+                        .foregroundColor(.white.opacity(0.85))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 8)
+                    
+                    // Linked song
+                    if let songId = displayUser.favoriteLyricSongId,
+                       let songName = displayUser.favoriteLyricSongName {
+                        NavigationLink(destination: SongDetailView(
+                            trackId: songId,
+                            trackName: songName,
+                            artistName: displayUser.favoriteLyricArtistName ?? "",
+                            albumName: nil,
+                            albumId: nil,
+                            imageURL: displayUser.favoriteLyricSongImageURL.flatMap { URL(string: $0) }
+                        )) {
+                            HStack(spacing: 8) {
+                                if let urlStr = displayUser.favoriteLyricSongImageURL,
+                                   let url = URL(string: urlStr) {
+                                    AsyncImage(url: url) { img in
+                                        img.resizable().aspectRatio(contentMode: .fill)
+                                    } placeholder: {
+                                        RoundedRectangle(cornerRadius: 3).fill(Color.gray.opacity(0.3))
+                                    }
+                                    .frame(width: 24, height: 24)
+                                    .cornerRadius(3)
+                                }
+                                Text(songName)
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .lineLimit(1)
+                                if let artist = displayUser.favoriteLyricArtistName {
+                                    Text("— \(artist)")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.4))
+                                        .lineLimit(1)
+                                }
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundColor(.white.opacity(0.25))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            
             // Rating count
             HStack(spacing: 4) {
                 Text("\(viewModel.ratings.count)")

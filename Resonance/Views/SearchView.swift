@@ -794,12 +794,18 @@ struct CustomAsyncImage<Content: View>: View {
     
     init(url: URL?, @ViewBuilder content: @escaping (AsyncImagePhase) -> Content) {
         self.url = url
+        // Serve from cache immediately so there's no placeholder flash on re-renders
+        if let url = url, let cached = CustomImageLoader.shared.cachedImage(for: url) {
+            self._phase = State(initialValue: .success(Image(uiImage: cached)))
+        } else {
+            self._phase = State(initialValue: .empty)
+        }
         self.content = content
     }
     
     var body: some View {
         content(phase)
-            .task {
+            .task(id: url) {
                 await loadImage()
             }
     }
@@ -810,10 +816,17 @@ struct CustomAsyncImage<Content: View>: View {
             return
         }
         
+        // Double-check cache inside the task (may have been populated since init)
+        if let cached = CustomImageLoader.shared.cachedImage(for: url) {
+            phase = .success(Image(uiImage: cached))
+            return
+        }
+        
         do {
             let (data, _) = try await CustomImageLoader.shared.session.data(from: url)
             #if canImport(UIKit)
             if let uiImage = UIImage(data: data) {
+                CustomImageLoader.shared.store(uiImage, for: url)
                 phase = .success(Image(uiImage: uiImage))
             } else {
                 phase = .failure(URLError(.cannotDecodeContentData))

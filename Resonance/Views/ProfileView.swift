@@ -23,6 +23,14 @@ struct ProfileView: View {
     @State private var showRemoveConfirmation = false
     @State private var showPhotoPicker = false
     @State private var imageToCrop: UIImage?
+    @State private var isEditingLyric = false
+    @State private var lyricText: String = ""
+    @State private var isSavingLyric = false
+    @State private var showLyricSongPicker = false
+    @State private var lyricSongIdDraft: String? = nil
+    @State private var lyricSongNameDraft: String? = nil
+    @State private var lyricSongArtistDraft: String? = nil
+    @State private var lyricSongImageURLDraft: String? = nil
     
     var body: some View {
         NavigationView {
@@ -78,6 +86,15 @@ struct ProfileView: View {
             .sheet(item: $selectedPickerType) { type in
                 TopItemPicker(viewModel: viewModel, itemType: type)
                     .environmentObject(spotifyService)
+            }
+            .sheet(isPresented: $showLyricSongPicker) {
+                LyricSongPicker(
+                    selectedSongId: $lyricSongIdDraft,
+                    selectedSongName: $lyricSongNameDraft,
+                    selectedArtistName: $lyricSongArtistDraft,
+                    selectedSongImageURL: $lyricSongImageURLDraft
+                )
+                .environmentObject(spotifyService)
             }
             .fullScreenCover(item: Binding(
                 get: { imageToCrop.map { IdentifiableImage(image: $0) } },
@@ -286,6 +303,195 @@ struct ProfileView: View {
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.white.opacity(0.5))
+            }
+            
+            // Favorite Lyric
+            if isEditingLyric {
+                VStack(alignment: .leading, spacing: 10) {
+                    TextField("type a favorite lyric...", text: $lyricText, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .padding(10)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(8)
+                        .foregroundColor(.white)
+                        .lineLimit(2...5)
+                        .onChange(of: lyricText) { newValue in
+                            if newValue.count > 200 {
+                                lyricText = String(newValue.prefix(200))
+                            }
+                        }
+                    
+                    // Linked Song Row
+                    Button(action: { showLyricSongPicker = true }) {
+                        HStack(spacing: 10) {
+                            if let urlStr = lyricSongImageURLDraft, let url = URL(string: urlStr) {
+                                AsyncImage(url: url) { img in
+                                    img.resizable().aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    RoundedRectangle(cornerRadius: 4).fill(Color.gray.opacity(0.3))
+                                }
+                                .frame(width: 36, height: 36)
+                                .cornerRadius(4)
+                            } else {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color.white.opacity(0.08))
+                                    .frame(width: 36, height: 36)
+                                    .overlay(Image(systemName: "music.note").foregroundColor(.white.opacity(0.4)).font(.caption))
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                if let name = lyricSongNameDraft {
+                                    Text(name)
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                        .lineLimit(1)
+                                    if let artist = lyricSongArtistDraft {
+                                        Text(artist)
+                                            .font(.caption2)
+                                            .foregroundColor(.white.opacity(0.6))
+                                            .lineLimit(1)
+                                    }
+                                } else {
+                                    Text("link the song")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.4))
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            if lyricSongIdDraft != nil {
+                                Button(action: {
+                                    lyricSongIdDraft = nil
+                                    lyricSongNameDraft = nil
+                                    lyricSongArtistDraft = nil
+                                    lyricSongImageURLDraft = nil
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.white.opacity(0.4))
+                                        .font(.caption)
+                                }
+                            } else {
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.white.opacity(0.3))
+                                    .font(.caption)
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.white.opacity(0.06))
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    HStack(spacing: 12) {
+                        Text("\(lyricText.count)/200")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.4))
+                        
+                        Spacer()
+                        
+                        Button("Cancel") {
+                            isEditingLyric = false
+                            lyricText = authManager.currentUser?.favoriteLyric ?? ""
+                            lyricSongIdDraft = authManager.currentUser?.favoriteLyricSongId
+                            lyricSongNameDraft = authManager.currentUser?.favoriteLyricSongName
+                            lyricSongArtistDraft = authManager.currentUser?.favoriteLyricArtistName
+                            lyricSongImageURLDraft = authManager.currentUser?.favoriteLyricSongImageURL
+                        }
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                        
+                        Button(action: {
+                            guard let userId = authManager.currentUser?.id else { return }
+                            isSavingLyric = true
+                            Task {
+                                do {
+                                    let trimmed = lyricText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    try await firebaseService.updateFavoriteLyric(
+                                        lyric: trimmed.isEmpty ? nil : trimmed,
+                                        songId: lyricSongIdDraft,
+                                        songName: lyricSongNameDraft,
+                                        artistName: lyricSongArtistDraft,
+                                        songImageURL: lyricSongImageURLDraft,
+                                        for: userId
+                                    )
+                                    authManager.currentUser?.favoriteLyric = trimmed.isEmpty ? nil : trimmed
+                                    authManager.currentUser?.favoriteLyricSongId = lyricSongIdDraft
+                                    authManager.currentUser?.favoriteLyricSongName = lyricSongNameDraft
+                                    authManager.currentUser?.favoriteLyricArtistName = lyricSongArtistDraft
+                                    authManager.currentUser?.favoriteLyricSongImageURL = lyricSongImageURLDraft
+                                } catch {
+                                    print("[ProfileView] Failed to save lyric: \(error)")
+                                }
+                                isSavingLyric = false
+                                isEditingLyric = false
+                            }
+                        }) {
+                            if isSavingLyric {
+                                ProgressView().scaleEffect(0.7).tint(.white)
+                            } else {
+                                Text("Save")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(Color(red: 0.11, green: 0.73, blue: 0.33))
+                            }
+                        }
+                        .disabled(isSavingLyric)
+                    }
+                }
+                .padding(.horizontal, 4)
+            } else {
+                Button(action: {
+                    lyricText = authManager.currentUser?.favoriteLyric ?? ""
+                    lyricSongIdDraft = authManager.currentUser?.favoriteLyricSongId
+                    lyricSongNameDraft = authManager.currentUser?.favoriteLyricSongName
+                    lyricSongArtistDraft = authManager.currentUser?.favoriteLyricArtistName
+                    lyricSongImageURLDraft = authManager.currentUser?.favoriteLyricSongImageURL
+                    isEditingLyric = true
+                }) {
+                    VStack(spacing: 8) {
+                        if let lyric = authManager.currentUser?.favoriteLyric, !lyric.isEmpty {
+                            Text("\"\(lyric)\"")
+                                .font(.subheadline)
+                                .italic()
+                                .foregroundColor(.white.opacity(0.85))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 4)
+                            
+                            // Linked song chip
+                            if let songName = authManager.currentUser?.favoriteLyricSongName {
+                                HStack(spacing: 8) {
+                                    if let urlStr = authManager.currentUser?.favoriteLyricSongImageURL,
+                                       let url = URL(string: urlStr) {
+                                        AsyncImage(url: url) { img in
+                                            img.resizable().aspectRatio(contentMode: .fill)
+                                        } placeholder: {
+                                            RoundedRectangle(cornerRadius: 3).fill(Color.gray.opacity(0.3))
+                                        }
+                                        .frame(width: 24, height: 24)
+                                        .cornerRadius(3)
+                                    }
+                                    Text(songName)
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.6))
+                                        .lineLimit(1)
+                                    if let artist = authManager.currentUser?.favoriteLyricArtistName {
+                                        Text("— \(artist)")
+                                            .font(.caption)
+                                            .foregroundColor(.white.opacity(0.4))
+                                            .lineLimit(1)
+                                    }
+                                }
+                            }
+                        } else {
+                            Text("+ add a favorite lyric")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.35))
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
             }
             
             // Ratings count
@@ -1058,6 +1264,134 @@ struct TopItemPicker: View {
             }
         } catch {
             print("Search failed: \(error)")
+            searchResults = []
+        }
+    }
+}
+
+// MARK: - Lyric Song Picker
+
+struct LyricSongPicker: View {
+    @Binding var selectedSongId: String?
+    @Binding var selectedSongName: String?
+    @Binding var selectedArtistName: String?
+    @Binding var selectedSongImageURL: String?
+    
+    @EnvironmentObject var spotifyService: SpotifyService
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var searchText = ""
+    @State private var searchResults: [SpotifyTrack] = []
+    @State private var isSearching = false
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color(red: 0.15, green: 0.08, blue: 0.18).ignoresSafeArea()
+                
+                VStack(spacing: 0) {
+                    // Search bar
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.white.opacity(0.5))
+                        
+                        TextField("search for a song...", text: $searchText)
+                            .textFieldStyle(.plain)
+                            .foregroundColor(.white)
+                            .onChange(of: searchText) { _ in
+                                Task { await performSearch() }
+                            }
+                        
+                        if !searchText.isEmpty {
+                            Button(action: { searchText = ""; searchResults = [] }) {
+                                Image(systemName: "xmark.circle.fill").foregroundColor(.white.opacity(0.5))
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(10)
+                    .padding()
+                    
+                    if isSearching {
+                        ProgressView().tint(.white).padding()
+                        Spacer()
+                    } else if searchResults.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "music.note.list")
+                                .font(.system(size: 48))
+                                .foregroundColor(.white.opacity(0.25))
+                            Text(searchText.isEmpty ? "search for the song your lyric is from" : "no results")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.5))
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding()
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(searchResults) { track in
+                                    Button(action: {
+                                        selectedSongId = track.id
+                                        selectedSongName = track.name
+                                        selectedArtistName = track.artists.first?.name
+                                        selectedSongImageURL = track.album?.images?.first?.url
+                                        dismiss()
+                                    }) {
+                                        HStack(spacing: 12) {
+                                            AsyncImage(url: track.imageURL) { img in
+                                                img.resizable().aspectRatio(contentMode: .fill)
+                                            } placeholder: {
+                                                RoundedRectangle(cornerRadius: 4).fill(Color.gray.opacity(0.3))
+                                            }
+                                            .frame(width: 44, height: 44)
+                                            .cornerRadius(4)
+                                            
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                Text(track.name)
+                                                    .font(.subheadline)
+                                                    .fontWeight(.semibold)
+                                                    .foregroundColor(.white)
+                                                    .lineLimit(1)
+                                                if let artist = track.artists.first?.name {
+                                                    Text(artist)
+                                                        .font(.caption)
+                                                        .foregroundColor(.white.opacity(0.6))
+                                                        .lineLimit(1)
+                                                }
+                                            }
+                                            Spacer()
+                                        }
+                                        .padding(.horizontal)
+                                        .padding(.vertical, 10)
+                                    }
+                                    .buttonStyle(.plain)
+                                    Divider().background(Color.white.opacity(0.08))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("link a song")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }.foregroundColor(.white)
+                }
+            }
+        }
+    }
+    
+    private func performSearch() async {
+        guard !searchText.isEmpty else { searchResults = []; return }
+        isSearching = true
+        defer { isSearching = false }
+        do {
+            searchResults = try await spotifyService.searchTracks(query: searchText)
+        } catch {
+            print("[LyricSongPicker] Search failed: \(error)")
             searchResults = []
         }
     }

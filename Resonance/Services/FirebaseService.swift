@@ -306,6 +306,37 @@ class FirebaseService: ObservableObject {
             .setData(from: user)
     }
     
+    func updateFavoriteLyric(
+        lyric: String?,
+        songId: String?,
+        songName: String?,
+        artistName: String?,
+        songImageURL: String?,
+        for userId: String
+    ) async throws {
+        var data: [String: Any] = [:]
+        
+        if let lyric = lyric, !lyric.isEmpty {
+            data["favoriteLyric"] = lyric
+        } else {
+            data["favoriteLyric"] = FieldValue.delete()
+        }
+        
+        if let songId = songId {
+            data["favoriteLyricSongId"] = songId
+            data["favoriteLyricSongName"] = songName as Any
+            data["favoriteLyricArtistName"] = artistName as Any
+            data["favoriteLyricSongImageURL"] = songImageURL as Any
+        } else {
+            data["favoriteLyricSongId"] = FieldValue.delete()
+            data["favoriteLyricSongName"] = FieldValue.delete()
+            data["favoriteLyricArtistName"] = FieldValue.delete()
+            data["favoriteLyricSongImageURL"] = FieldValue.delete()
+        }
+        
+        try await db.collection("users").document(userId).updateData(data)
+    }
+    
     func getUserProfile(userId: String) async throws -> AppUser? {
         let document = try await db.collection("users")
             .document(userId)

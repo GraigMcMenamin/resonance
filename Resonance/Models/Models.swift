@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - Spotify Models
 
@@ -218,6 +221,13 @@ struct AppUser: Codable, Identifiable {
     // Push notification tokens (FCM)
     var fcmTokens: [String]?
     
+    // Favorite lyric
+    var favoriteLyric: String?
+    var favoriteLyricSongId: String?
+    var favoriteLyricSongName: String?
+    var favoriteLyricArtistName: String?
+    var favoriteLyricSongImageURL: String?
+    
     // Computed property: custom image takes priority over Spotify image
     var displayImageURL: String? {
         return customImageURL ?? imageURL
@@ -232,6 +242,8 @@ struct AppUser: Codable, Identifiable {
         case id, firebaseUID, username, usernameLowercase
         case spotifyId, spotifyAccessToken, spotifyRefreshToken, tokenExpirationDate
         case email, imageURL, customImageURL, createdAt, authMethod, fcmTokens
+        case favoriteLyric, favoriteLyricSongId, favoriteLyricSongName
+        case favoriteLyricArtistName, favoriteLyricSongImageURL
     }
 }
 
@@ -521,12 +533,30 @@ class CustomImageLoader {
     static let shared = CustomImageLoader()
     
     let session: URLSession
+    #if canImport(UIKit)
+    private let cache = NSCache<NSURL, UIImage>()
+    #endif
     
     private init() {
         let config = URLSessionConfiguration.default
         let delegate = ImageURLSessionDelegate()
         session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
+        #if canImport(UIKit)
+        cache.countLimit = 200
+        cache.totalCostLimit = 50 * 1024 * 1024 // 50 MB
+        #endif
     }
+    
+    #if canImport(UIKit)
+    func cachedImage(for url: URL) -> UIImage? {
+        cache.object(forKey: url as NSURL)
+    }
+    
+    func store(_ image: UIImage, for url: URL) {
+        let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
+        cache.setObject(image, forKey: url as NSURL, cost: cost)
+    }
+    #endif
 }
 
 // MARK: - User Top Items Model
