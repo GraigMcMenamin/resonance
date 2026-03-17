@@ -678,6 +678,7 @@ struct CommentRow: View {
                             }
                         }
                     }
+                    .buttonStyle(.plain)
                     .disabled(isTogglingLike || authManager.currentUser == nil)
                     
                     if isOwnComment {
@@ -686,6 +687,7 @@ struct CommentRow: View {
                                 .font(.system(size: largerIcons ? 15 : 12))
                                 .foregroundColor(.white.opacity(0.4))
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 

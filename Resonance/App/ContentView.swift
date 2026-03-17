@@ -103,7 +103,7 @@ struct AuthenticatedView: View {
                 
                 BuddyBoardView()
                     .tabItem {
-                        Label("buddies & me", systemImage: "music.note.list")
+                        Label("buddy board", systemImage: "music.note.list")
                     }
                     .tag(1)
                 

@@ -383,6 +383,9 @@ exports.onRatingCreated = onDocumentWritten(
 
       console.log(`Fetched ${allBuddyDocs.length} buddy documents`);
 
+      // Today's UTC date string used as part of the rate-limit key
+      const todayUtc = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+
       // Process all buddies in parallel
       const buddyNotifications = allBuddyDocs.map(async (buddyDoc) => {
         try {
@@ -394,6 +397,32 @@ exports.onRatingCreated = onDocumentWritten(
             console.log(`No FCM tokens for buddy ${buddyId}`);
             return;
           }
+
+          // --- Rate limit: max 2 rating notifications per rater per buddy per UTC day ---
+          const rateLimitRef = admin.firestore()
+            .collection("notificationRateLimits")
+            .doc(`${buddyId}_${userId}_${todayUtc}`);
+
+          const shouldSend = await admin.firestore().runTransaction(async (transaction) => {
+            const rateLimitDoc = await transaction.get(rateLimitRef);
+            const currentCount = rateLimitDoc.exists ? (rateLimitDoc.data().count || 0) : 0;
+            if (currentCount >= 2) {
+              return false;
+            }
+            transaction.set(rateLimitRef, {
+              count: currentCount + 1,
+              expiresAt: admin.firestore.Timestamp.fromDate(
+                new Date(Date.now() + 2 * 24 * 60 * 60 * 1000) // auto-expire after 2 days
+              ),
+            }, { merge: true });
+            return true;
+          });
+
+          if (!shouldSend) {
+            console.log(`Rate limit reached for buddy ${buddyId} from rater ${userId} on ${todayUtc}, skipping`);
+            return;
+          }
+          // --- End rate limit check ---
 
           // Build notification content
           let notificationBody = "";

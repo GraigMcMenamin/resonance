@@ -288,10 +288,10 @@ struct BuddyRatingRow: View {
     
     /// Display name: prefer username
     private var displayUsername: String {
-        if isCurrentUser {
-            return "you"
-        } else if let username = username, !username.isEmpty {
+        if let username = username, !username.isEmpty {
             return "@\(username)"
+        } else if isCurrentUser {
+            return "you"
         } else {
             return "User"
         }

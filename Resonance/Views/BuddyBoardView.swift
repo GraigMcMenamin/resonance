@@ -39,7 +39,7 @@ struct BuddyBoardView: View {
                 
                 // Section Picker (My Ratings vs Buddy Ratings)
                 Picker("Section", selection: $selectedSection) {
-                    Text("buddy ratings").tag(LibrarySection.buddyReviews)
+                    Text("buddy board").tag(LibrarySection.buddyReviews)
                     Text("my ratings").tag(LibrarySection.myRatings)
                 }
                 .pickerStyle(.segmented)
@@ -52,7 +52,7 @@ struct BuddyBoardView: View {
                     buddyReviewsSection
                 }
             }
-            .navigationTitle(selectedSection == .myRatings ? "me" : "my buddies")
+            .navigationTitle(selectedSection == .myRatings ? "my board" : "buddy board")
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: selectedSection) { newValue in
                 if newValue == .buddyReviews {
@@ -689,6 +689,7 @@ struct LibraryBuddyRatingRow: View {
     @State private var comments: [ReviewComment] = []
     @State private var commentLikeCounts: [String: Int] = [:]
     @State private var newCommentText = ""
+    @FocusState private var isCommentFieldFocused: Bool
     @State private var isLoadingComments = false
     @State private var isSubmittingComment = false
     @State private var isTogglingLike = false
@@ -919,8 +920,8 @@ struct LibraryBuddyRatingRow: View {
             }
             .padding(.top, 4)
             
-            // Inline comments section (for ratings without a written review)
-            if !rating.hasReviewContent && (!comments.isEmpty || showComments) {
+            // Inline comments section
+            if !comments.isEmpty || (!rating.hasReviewContent && showComments) {
                 commentsSection
             }
         }
@@ -931,9 +932,7 @@ struct LibraryBuddyRatingRow: View {
             hasLoadedInteractions = true
             await loadInteractions()
             // Auto-load comments for inline display
-            if !rating.hasReviewContent {
-                await loadComments()
-            }
+            await loadComments()
         }
         .onAppear {
             if !hasLoadedInteractions {
@@ -1009,6 +1008,7 @@ struct LibraryBuddyRatingRow: View {
                         .background(Color.white.opacity(0.1))
                         .cornerRadius(20)
                         .foregroundColor(.white)
+                        .focused($isCommentFieldFocused)
                         .onChange(of: newCommentText) { newValue in
                             if newValue.count > maxCommentLength {
                                 newCommentText = String(newValue.prefix(maxCommentLength))
@@ -1056,6 +1056,7 @@ struct LibraryBuddyRatingRow: View {
                         .environmentObject(authManager)
                         .environmentObject(firebaseService)
                     }
+                    .id(comment.id)
                 }
                 
                 if sortedComments.count > maxVisibleComments && !showAllComments {
@@ -1172,6 +1173,8 @@ struct LibraryBuddyRatingRow: View {
                     commentLikeCounts[comment.id] = 0
                     commentsCount += 1
                     newCommentText = ""
+                    isCommentFieldFocused = false
+                    showComments = false
                 }
             } catch {
                 print("Error submitting comment: \(error)")
