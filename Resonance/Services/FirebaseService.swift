@@ -239,6 +239,56 @@ class FirebaseService: ObservableObject {
         }
     }
     
+    // MARK: - Cursor Pagination for User Ratings
+
+    /// Resets the pagination cursor so the next fetchNextUserRatingsPage starts from the beginning.
+    func resetUserRatingsPagination(for userId: String) {
+        lastDocuments.removeValue(forKey: "userRatings_\(userId)")
+    }
+
+    /// Fetches the next page of ratings for a user, using a stored cursor.
+    /// Returns the ratings and whether more pages likely exist.
+    func fetchNextUserRatingsPage(userId: String, limit: Int = 50) async throws -> (ratings: [UserRating], hasMore: Bool) {
+        let cursorKey = "userRatings_\(userId)"
+        let lastDoc = lastDocuments[cursorKey]
+
+        var query: Query = db.collection("ratings")
+            .whereField("userId", isEqualTo: userId)
+            .order(by: "dateRated", descending: true)
+            .limit(to: limit)
+
+        if let lastDoc = lastDoc {
+            query = query.start(afterDocument: lastDoc)
+        }
+
+        let snapshot = try await query.getDocuments()
+        let ratings = snapshot.documents.compactMap { doc in
+            try? doc.data(as: UserRating.self)
+        }
+
+        if let last = snapshot.documents.last {
+            lastDocuments[cursorKey] = last
+        }
+
+        return (ratings, ratings.count == limit)
+    }
+
+    /// Fetches ratings for a specific item (spotifyId) only from the given list of users.
+    /// Uses chunked 'in' queries to stay within Firestore's 30-item limit per query.
+    func fetchRatingsForItemByUsers(spotifyId: String, userIds: [String]) async throws -> [UserRating] {
+        guard !userIds.isEmpty else { return [] }
+        let chunks = userIds.chunked(into: 30)
+        var result: [UserRating] = []
+        for chunk in chunks {
+            let snapshot = try await db.collection("ratings")
+                .whereField("spotifyId", isEqualTo: spotifyId)
+                .whereField("userId", in: chunk)
+                .getDocuments()
+            result += snapshot.documents.compactMap { try? $0.data(as: UserRating.self) }
+        }
+        return result.sorted { $0.dateRated > $1.dateRated }
+    }
+
     func fetchRatingsByType(_ type: UserRating.RatingType) async throws -> [UserRating] {
         let snapshot = try await db.collection("ratings")
             .whereField("type", isEqualTo: type.rawValue)
@@ -607,6 +657,14 @@ class FirebaseService: ObservableObject {
         return snapshot.documents.compactMap { doc in
             try? doc.data(as: UserRating.self)
         }
+    }
+    
+    func getUserRatingCount(userId: String) async throws -> Int {
+        let snapshot = try await db.collection("ratings")
+            .whereField("userId", isEqualTo: userId)
+            .count
+            .getAggregation(source: .server)
+        return Int(truncating: snapshot.count)
     }
     
     // MARK: - Buddy Request Operations

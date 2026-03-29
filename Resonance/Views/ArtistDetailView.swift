@@ -28,6 +28,7 @@ struct ArtistDetailView: View {
     @State private var buddies: [Buddy] = []
     @State private var buddyRatings: [UserRating] = []
     @State private var showSendSheet = false
+    @State private var itemUserRating: UserRating?
     
     var body: some View {
         ZStack {
@@ -119,11 +120,12 @@ struct ArtistDetailView: View {
             if !spotifyService.isAuthenticated {
                 await spotifyService.authenticate()
             }
-            await loadArtistData()
-            await loadBuddyRatings()
-        }
-        .onChange(of: ratingsManager.allRatings) { _ in
-            updateBuddyRatings()
+            async let artistLoad: Void = loadArtistData()
+            async let buddyLoad: Void = loadBuddyRatings()
+            async let userRatingLoad: Void = fetchUserRating()
+            await artistLoad
+            await buddyLoad
+            await userRatingLoad
         }
     }
     
@@ -280,7 +282,7 @@ struct ArtistDetailView: View {
     private func getUserRating() -> UserRating? {
         guard let userId = authManager.currentUser?.id else { return nil }
         let ratingId = UserRating.makeId(userId: userId, spotifyId: artistId)
-        return ratingsManager.getRating(for: ratingId)
+        return ratingsManager.getRating(for: ratingId) ?? itemUserRating
     }
     
     private var hasUserRating: Bool {
@@ -288,21 +290,22 @@ struct ArtistDetailView: View {
     }
     
     // MARK: - Buddy Ratings Loading
-    
+
+    private func fetchUserRating() async {
+        guard let userId = authManager.currentUser?.id else { return }
+        let ratingId = UserRating.makeId(userId: userId, spotifyId: artistId)
+        itemUserRating = try? await firebaseService.getRating(id: ratingId)
+    }
+
     private func loadBuddyRatings() async {
         guard let userId = authManager.currentUser?.id else { return }
-        
         do {
             buddies = try await firebaseService.getBuddies(forUserId: userId)
-            updateBuddyRatings()
+            let buddyIds = buddies.map { $0.id }
+            buddyRatings = try await firebaseService.fetchRatingsForItemByUsers(spotifyId: artistId, userIds: buddyIds)
         } catch {
-            print("Error loading buddies: \(error)")
+            print("Error loading buddy ratings: \(error)")
         }
-    }
-    
-    private func updateBuddyRatings() {
-        let buddyIds = buddies.map { $0.id }
-        buddyRatings = ratingsManager.getBuddyRatings(for: artistId, buddyIds: buddyIds)
     }
     
     // MARK: - Top Tracks Section
@@ -427,7 +430,7 @@ struct ArtistDetailView: View {
 struct TrackRowCompact: View {
     let track: SpotifyTrack
     let index: Int
-    let ratingsManager: RatingsManager
+    @ObservedObject var ratingsManager: RatingsManager
     let userId: String?
     
     var body: some View {
@@ -492,7 +495,7 @@ struct TrackRowCompact: View {
 
 struct AlbumCardView: View {
     let album: SpotifyAlbum
-    let ratingsManager: RatingsManager
+    @ObservedObject var ratingsManager: RatingsManager
     let userId: String?
     
     var body: some View {

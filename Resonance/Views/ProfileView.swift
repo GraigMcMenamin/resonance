@@ -510,7 +510,7 @@ struct ProfileView: View {
             
             // Ratings count
             HStack(spacing: 4) {
-                Text("\(ratingsManager.ratings.count)")
+                Text("\(ratingsManager.totalRatingsCount)")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(.white)
@@ -850,7 +850,7 @@ struct ProfileView: View {
                 .fontWeight(.bold)
                 .foregroundColor(.white)
             
-            if ratingsManager.ratings.isEmpty {
+            if ratingsManager.ratings.isEmpty && !ratingsManager.isLoading {
                 VStack(spacing: 8) {
                     Image(systemName: "star.fill")
                         .font(.system(size: 40))
@@ -863,7 +863,7 @@ struct ProfileView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
             } else {
-                // Recent ratings
+                // Most recent 10 ratings only
                 VStack(spacing: 12) {
                     ForEach(ratingsManager.allRatingsSorted.prefix(10)) { rating in
                         NavigationLink(destination: ratingDestinationView(for: rating)) {

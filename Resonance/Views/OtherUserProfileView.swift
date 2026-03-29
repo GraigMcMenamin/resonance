@@ -440,7 +440,7 @@ struct OtherUserProfileView: View {
             
             // Rating count
             HStack(spacing: 4) {
-                Text("\(viewModel.ratings.count)")
+                Text("\(viewModel.totalRatingsCount)")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(.white)
@@ -707,6 +707,7 @@ class OtherUserProfileViewModel: ObservableObject {
     @Published var topTracks: [TopItem] = []
     @Published var topAlbums: [TopItem] = []
     @Published var ratings: [UserRating] = []
+    @Published var totalRatingsCount: Int = 0
     @Published var buddies: [Buddy] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
@@ -726,12 +727,13 @@ class OtherUserProfileViewModel: ObservableObject {
         print("DEBUG: Loading data for userId: \(userId)")
         
         do {
-            // Load top items, ratings, and buddies in parallel
+            // Load top items, ratings, count, and buddies in parallel
             async let topItemsTask = firebaseService.getUserTopItems(userId: userId)
             async let ratingsTask = firebaseService.getUserRatings(userId: userId)
+            async let countTask = firebaseService.getUserRatingCount(userId: userId)
             async let buddiesTask = firebaseService.getBuddies(forUserId: userId)
             
-            let (topItems, userRatings, userBuddies) = try await (topItemsTask, ratingsTask, buddiesTask)
+            let (topItems, userRatings, ratingCount, userBuddies) = try await (topItemsTask, ratingsTask, countTask, buddiesTask)
             
             print("DEBUG: Top items found: \(topItems != nil)")
             print("DEBUG: Ratings count: \(userRatings.count)")
@@ -745,6 +747,7 @@ class OtherUserProfileViewModel: ObservableObject {
             }
             
             ratings = userRatings
+            totalRatingsCount = ratingCount
             buddies = userBuddies
             
             // Calculate average rating

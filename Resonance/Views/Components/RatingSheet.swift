@@ -68,7 +68,7 @@ struct RatingSheet: View {
                             saveOrGuestSection
                             
                             // Delete Button (if editing existing)
-                            if existingReview != nil {
+                            if hasExistingRating {
                                 deleteButton
                             }
                         }
@@ -76,7 +76,7 @@ struct RatingSheet: View {
                     }
                 }
             }
-            .navigationTitle(existingReview != nil ? "Edit Rating" : "Rate & Review")
+            .navigationTitle(hasExistingRating ? "Edit Rating" : "Rate & Review")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {

@@ -194,7 +194,7 @@ struct SearchBar: View {
 struct ArtistListView: View {
     let artists: [SpotifyArtist]
     @Binding var selectedItem: RatableItem?
-    let ratingsManager: RatingsManager
+    @ObservedObject var ratingsManager: RatingsManager
     let userId: String?
     
     var body: some View {
@@ -285,7 +285,7 @@ struct ArtistListView: View {
 struct AlbumListView: View {
     let albums: [SpotifyAlbum]
     @Binding var selectedItem: RatableItem?
-    let ratingsManager: RatingsManager
+    @ObservedObject var ratingsManager: RatingsManager
     let userId: String?
     
     var body: some View {
@@ -381,7 +381,7 @@ struct AlbumListView: View {
 struct TrackListView: View {
     let tracks: [SpotifyTrack]
     @Binding var selectedItem: RatableItem?
-    let ratingsManager: RatingsManager
+    @ObservedObject var ratingsManager: RatingsManager
     let userId: String?
     
     var body: some View {
@@ -481,7 +481,7 @@ struct AllResultsView: View {
     let albums: [SpotifyAlbum]
     let tracks: [SpotifyTrack]
     @Binding var selectedItem: RatableItem?
-    let ratingsManager: RatingsManager
+    @ObservedObject var ratingsManager: RatingsManager
     let userId: String?
     
     var body: some View {

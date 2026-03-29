@@ -25,7 +25,7 @@ func colorForPercentage(_ percentage: Double) -> Color {
 /// A view that displays rating information with optional average rating
 struct RatingBadge: View {
     let spotifyId: String
-    let ratingsManager: RatingsManager
+    @ObservedObject var ratingsManager: RatingsManager
     let userId: String?
     
     private var userRating: UserRating? {
@@ -84,7 +84,7 @@ struct RatingBadge: View {
 /// Compact version for list items
 struct RatingBadgeCompact: View {
     let spotifyId: String
-    let ratingsManager: RatingsManager
+    @ObservedObject var ratingsManager: RatingsManager
     let userId: String?
     
     private var userRating: UserRating? {

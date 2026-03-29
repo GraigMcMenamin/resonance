@@ -12,7 +12,9 @@ import Combine
 class RatingsManager: ObservableObject {
     @Published var ratings: [UserRating] = [] // Current user's ratings
     @Published var allRatings: [UserRating] = [] // All users' ratings
+    @Published var totalRatingsCount: Int = 0 // True total from Firestore count aggregation
     @Published var isLoading = false
+    @Published var hasMoreRatings = false
     @Published var errorMessage: String?
     
     private let firebaseService: FirebaseService
@@ -55,6 +57,7 @@ class RatingsManager: ObservableObject {
                 ratings[index] = rating
             } else {
                 ratings.append(rating)
+                totalRatingsCount += 1
             }
         } catch {
             errorMessage = "Failed to save rating: \(error.localizedDescription)"
@@ -66,7 +69,9 @@ class RatingsManager: ObservableObject {
         do {
             try await firebaseService.deleteRating(id: id)
             // Optimistically update local array
+            let existed = ratings.contains { $0.id == id }
             ratings.removeAll { $0.id == id }
+            if existed { totalRatingsCount = max(0, totalRatingsCount - 1) }
         } catch {
             errorMessage = "Failed to delete rating: \(error.localizedDescription)"
             print("Error deleting rating from Firebase: \(error)")
@@ -74,32 +79,54 @@ class RatingsManager: ObservableObject {
     }
     
     func getRating(for id: String) -> UserRating? {
-        ratings.first { $0.id == id }
+        ratings.first { $0.id == id } ?? allRatings.first { $0.id == id }
     }
     
     // MARK: - Load User Ratings
     
-    func loadUserRatings(userId: String) async {
+    func loadUserRatings(userId: String, forceRefresh: Bool = false) async {
+        // Skip if already loaded for this user (e.g. navigating away and back)
+        guard forceRefresh || currentUserId != userId || ratings.isEmpty else { return }
         isLoading = true
         currentUserId = userId
+        // Reset cursor so we start from page 1
+        firebaseService.resetUserRatingsPagination(for: userId)
         do {
-            let (userRatings, _) = try await firebaseService.fetchUserRatings(userId: userId)
-            self.ratings = userRatings
+            async let ratingsTask = firebaseService.fetchNextUserRatingsPage(userId: userId)
+            async let countTask = firebaseService.getUserRatingCount(userId: userId)
+            let (result, count) = try await (ratingsTask, countTask)
+            self.ratings = result.ratings
+            self.totalRatingsCount = count
+            self.hasMoreRatings = self.ratings.count < count
             isLoading = false
         } catch {
             errorMessage = "Failed to load ratings: \(error.localizedDescription)"
             isLoading = false
         }
     }
+
+    func loadMoreUserRatings(userId: String) async {
+        guard hasMoreRatings, !isLoading else { return }
+        isLoading = true
+        do {
+            let result = try await firebaseService.fetchNextUserRatingsPage(userId: userId)
+            self.ratings.append(contentsOf: result.ratings)
+            self.hasMoreRatings = self.ratings.count < self.totalRatingsCount
+            isLoading = false
+        } catch {
+            errorMessage = "Failed to load more ratings: \(error.localizedDescription)"
+            isLoading = false
+        }
+    }
     
-    /// Force-refreshes by clearing the local cache first, then re-fetching from Firestore.
+    /// Force-refreshes by re-fetching from page 1.
     func refreshUserRatings(userId: String) async {
-        firebaseService.invalidateRatingsCache(for: userId)
-        await loadUserRatings(userId: userId)
+        await loadUserRatings(userId: userId, forceRefresh: true)
     }
     
     func clearUserRatings() {
         ratings = []
+        hasMoreRatings = false
         currentUserId = nil
     }
     

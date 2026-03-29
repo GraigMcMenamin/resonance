@@ -188,8 +188,25 @@ struct BuddyBoardView: View {
                         NavigationLink(destination: destinationView(for: rating)) {
                             RatingRow(rating: rating)
                         }
+                        .onAppear {
+                            if rating.id == filteredRatings.last?.id,
+                               ratingsManager.hasMoreRatings,
+                               let userId = authManager.currentUser?.id {
+                                Task { await ratingsManager.loadMoreUserRatings(userId: userId) }
+                            }
+                        }
                     }
                     .onDelete(perform: deleteRatings)
+
+                    if ratingsManager.isLoading && !ratingsManager.ratings.isEmpty {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
                 }
             }
             .listStyle(.plain)

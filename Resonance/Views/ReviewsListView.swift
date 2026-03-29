@@ -69,7 +69,10 @@ struct ReviewsListView: View {
                                         review: review,
                                         initialLikesCount: reviewLikeCounts[review.id] ?? 0,
                                         buddyIds: buddyIds,
-                                        autoExpandComments: review.id == scrollToReviewId
+                                        autoExpandComments: review.id == scrollToReviewId,
+                                        onDelete: {
+                                            await deleteReview(review)
+                                        }
                                     )
                                     .id(review.id)
                                     .environmentObject(authManager)
@@ -173,6 +176,16 @@ struct ReviewsListView: View {
         
         isLoading = false
     }
+    
+    private func deleteReview(_ review: Review) async {
+        do {
+            try await firebaseService.deleteRating(id: review.id)
+            reviews.removeAll { $0.id == review.id }
+            reviewLikeCounts.removeValue(forKey: review.id)
+        } catch {
+            print("Error deleting review: \(error)")
+        }
+    }
 }
 
 struct ReviewCard: View {
@@ -180,6 +193,7 @@ struct ReviewCard: View {
     let initialLikesCount: Int
     let buddyIds: Set<String>
     var autoExpandComments: Bool = false
+    var onDelete: (() async -> Void)? = nil
     
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
@@ -197,9 +211,14 @@ struct ReviewCard: View {
     @State private var showAllComments = false
     @State private var hasLoadedInteractions = false
     @State private var hasLoadedComments = false
+    @State private var showDeleteConfirmation = false
     
     private let maxCommentLength = 100
     private let maxVisibleComments = 3
+    
+    private var isOwnReview: Bool {
+        authManager.currentUser?.id == review.userId
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -298,6 +317,14 @@ struct ReviewCard: View {
                 }
                 
                 Spacer()
+                
+                if isOwnReview, onDelete != nil {
+                    Button(action: { showDeleteConfirmation = true }) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                }
             }
             .padding(.top, 4)
             
@@ -310,6 +337,14 @@ struct ReviewCard: View {
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.white.opacity(0.05))
         )
+        .confirmationDialog("Delete Review", isPresented: $showDeleteConfirmation) {
+            Button("Delete Review", role: .destructive) {
+                Task { await onDelete?() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to delete your review? Your numeric rating will be kept.")
+        }
         .task {
             guard !hasLoadedInteractions else { return }
             hasLoadedInteractions = true
