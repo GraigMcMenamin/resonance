@@ -750,13 +750,14 @@ struct PendingRecommendationCard: View {
                 }
             }) {
                 Image(systemName: "play.circle.fill")
-                    .font(.system(size: 24))
+                    .font(.system(size: 30))
                     .foregroundColor(.green)
             }
             .buttonStyle(.plain)
-            .padding(8)
+            .padding(.top, 36)
+            .padding(.trailing, 10)
         }
-        .frame(width: 250, height: 200)
+        .frame(width: 290, height: 200)
         .background(Color.white.opacity(0.1))
         .cornerRadius(12)
     }
