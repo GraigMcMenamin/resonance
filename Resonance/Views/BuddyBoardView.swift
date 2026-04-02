@@ -258,13 +258,11 @@ struct BuddyBoardView: View {
                                     .listRowInsets(EdgeInsets())
                                     .id(item.id)
                             case .recommendation(let rec, let receiverRating):
-                                NavigationLink(destination: destinationView(forRecommendation: rec)) {
-                                    RecommendationFeedRow(
-                                        recommendation: rec,
-                                        receiverRating: receiverRating,
-                                        currentUserId: authManager.currentUser?.id
-                                    )
-                                }
+                                RecommendationFeedRow(
+                                    recommendation: rec,
+                                    receiverRating: receiverRating,
+                                    currentUserId: authManager.currentUser?.id
+                                )
                                 .id(item.id)
                             }
                         }
@@ -582,16 +580,10 @@ struct RatingRow: View {
             if rating.hasReviewContent, let content = rating.reviewContent {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "quote.bubble.fill")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text("my review")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.secondary)
-                        }
-                        
+                        Text("review:")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
                         Text(content)
                             .font(.subheadline)
                             .foregroundColor(.primary)
@@ -601,7 +593,7 @@ struct RatingRow: View {
                     Spacer()
                 }
                 .padding(.top, 8)
-                .padding(.leading, 72) // Align with text content (60px image + 12px spacing)
+                .padding(.leading, 72)
             }
         }
         .padding(.vertical, 4)
@@ -797,9 +789,13 @@ struct LibraryBuddyRatingRow: View {
                 }
                 .buttonStyle(.plain)
                 
-                Text(rating.username ?? "Unknown")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+                Button(action: { navigateToProfile = true }) {
+                    Text(rating.username ?? "Unknown")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                }
+                .buttonStyle(.plain)
                 
                 Spacer()
                 
@@ -882,11 +878,11 @@ struct LibraryBuddyRatingRow: View {
             
             // Review content (if they wrote one)
             if rating.hasReviewContent, let content = rating.reviewContent {
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "quote.bubble.fill")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("review:")
                         .font(.caption)
+                        .fontWeight(.medium)
                         .foregroundColor(.secondary)
-                    
                     Text(content)
                         .font(.subheadline)
                         .foregroundColor(.primary)
@@ -938,8 +934,14 @@ struct LibraryBuddyRatingRow: View {
             .padding(.top, 4)
             
             // Inline comments section
-            if !comments.isEmpty || (!rating.hasReviewContent && showComments) {
-                commentsSection
+            if hasLoadedComments {
+                if !comments.isEmpty || showComments {
+                    commentsSection
+                }
+            } else if commentsCount > 0 {
+                // Reserve approximate height while loading so the row doesn't shift when comments arrive
+                Color.clear
+                    .frame(height: CGFloat(min(commentsCount, maxVisibleComments)) * 56)
             }
         }
         .padding(.vertical, 8)
@@ -948,7 +950,6 @@ struct LibraryBuddyRatingRow: View {
             guard !hasLoadedInteractions else { return }
             hasLoadedInteractions = true
             await loadInteractions()
-            // Auto-load comments for inline display
             await loadComments()
         }
         .onAppear {
@@ -1012,6 +1013,7 @@ struct LibraryBuddyRatingRow: View {
             withAnimation {
                 showComments.toggle()
             }
+            Task { await loadComments() }
         }
     }
     
@@ -1226,6 +1228,10 @@ struct RecommendationFeedRow: View {
     let receiverRating: UserRating?
     let currentUserId: String?
     
+    @State private var navigateToSenderProfile = false
+    @State private var navigateToReceiverProfile = false
+    @State private var navigateToMusic = false
+    
     private var percentageColor: Color {
         guard let rating = receiverRating else { return .gray }
         let pct = Double(rating.percentage)
@@ -1260,25 +1266,54 @@ struct RecommendationFeedRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Hidden NavigationLinks for profile navigation
+            NavigationLink(destination: BuddyProfileDestination(userId: recommendation.senderId), isActive: $navigateToSenderProfile) {
+                EmptyView()
+            }
+            .hidden()
+            .frame(width: 0, height: 0)
+
+            NavigationLink(destination: BuddyProfileDestination(userId: recommendation.receiverId), isActive: $navigateToReceiverProfile) {
+                EmptyView()
+            }
+            .hidden()
+            .frame(width: 0, height: 0)
+
+            NavigationLink(destination: musicDestination, isActive: $navigateToMusic) {
+                EmptyView()
+            }
+            .hidden()
+            .frame(width: 0, height: 0)
+
             // Header: "sender sent receiver"
             HStack(spacing: 6) {
-                // Sender avatar
-                avatarView(imageURL: recommendation.senderImageURL)
-                
-                Text(senderName)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+                // Sender avatar + name - tappable
+                Button(action: { navigateToSenderProfile = true }) {
+                    HStack(spacing: 6) {
+                        avatarView(imageURL: recommendation.senderImageURL)
+                        Text(senderName)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                    }
+                }
+                .buttonStyle(.plain)
                 
                 Text("sent")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 
-                // Receiver avatar
-                avatarView(imageURL: recommendation.receiverImageURL)
-                
-                Text(receiverName)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+                // Receiver avatar + name - tappable
+                Button(action: { navigateToReceiverProfile = true }) {
+                    HStack(spacing: 6) {
+                        avatarView(imageURL: recommendation.receiverImageURL)
+                        Text(receiverName)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                    }
+                }
+                .buttonStyle(.plain)
                 
                 Spacer()
                 
@@ -1291,7 +1326,7 @@ struct RecommendationFeedRow: View {
             if let message = recommendation.message, !message.isEmpty {
                 HStack(alignment: .top, spacing: 4) {
                     Text("and said:")
-                        .font(.subheadline)
+                        .font(.caption)
                         .foregroundColor(.secondary)
                     
                     Text(message)
@@ -1299,79 +1334,81 @@ struct RecommendationFeedRow: View {
                         .foregroundColor(.primary)
                         .lineLimit(2)
                 }
-                .padding(.leading, 30)
             }
             
-            // Music item
-            HStack(spacing: 12) {
-                // Item image
-                if let imageURLString = recommendation.imageURL, let url = URL(string: imageURLString) {
-                    CustomAsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 50, height: 50)
-                                .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
-                        default:
-                            Image(systemName: itemTypeIcon)
-                                .font(.title2)
-                                .foregroundColor(.gray)
-                                .frame(width: 50, height: 50)
-                                .background(Color.gray.opacity(0.2))
-                                .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+            // Music item - tappable
+            Button(action: { navigateToMusic = true }) {
+                HStack(spacing: 12) {
+                    // Item image
+                    if let imageURLString = recommendation.imageURL, let url = URL(string: imageURLString) {
+                        CustomAsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 50, height: 50)
+                                    .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                            default:
+                                Image(systemName: itemTypeIcon)
+                                    .font(.title2)
+                                    .foregroundColor(.gray)
+                                    .frame(width: 50, height: 50)
+                                    .background(Color.gray.opacity(0.2))
+                                    .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                            }
+                        }
+                    } else {
+                        Image(systemName: itemTypeIcon)
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                            .frame(width: 50, height: 50)
+                            .background(Color.gray.opacity(0.2))
+                            .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(recommendation.itemName)
+                            .font(.headline)
+                            .lineLimit(1)
+                        
+                        if let artistName = recommendation.artistName {
+                            Text(artistName)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
                         }
                     }
-                } else {
-                    Image(systemName: itemTypeIcon)
-                        .font(.title2)
-                        .foregroundColor(.gray)
-                        .frame(width: 50, height: 50)
-                        .background(Color.gray.opacity(0.2))
-                        .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(recommendation.itemName)
-                        .font(.headline)
-                        .lineLimit(1)
                     
-                    if let artistName = recommendation.artistName {
-                        Text(artistName)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
+                    Spacer()
+                    
+                    // Rating badge or pending status
+                    if let rating = receiverRating {
+                        Text("\(rating.percentage)%")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundColor(percentageColor)
+                    } else {
+                        VStack(spacing: 2) {
+                            Image(systemName: "clock")
+                                .font(.title3)
+                                .foregroundColor(.orange)
+                            Text(isCurrentUserReceiver ? "tap to rate" : "pending")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                        }
                     }
-                }
-                
-                Spacer()
-                
-                // Rating badge or pending status
-                if let rating = receiverRating {
-                    Text("\(rating.percentage)%")
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundColor(percentageColor)
-                } else {
-                    VStack(spacing: 2) {
-                        Image(systemName: "clock")
-                            .font(.title3)
-                            .foregroundColor(.orange)
-                        Text(isCurrentUserReceiver ? "tap to rate" : "pending")
-                            .font(.caption2)
-                            .foregroundColor(.orange)
-                    }
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.gray.opacity(0.5))
                 }
             }
+            .buttonStyle(.plain)
             
             // Show receiver's review if they rated it
             if let rating = receiverRating, rating.hasReviewContent, let content = rating.reviewContent {
                 HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "quote.bubble.fill")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(receiverName)'s review:")
                             .font(.caption)
@@ -1386,6 +1423,34 @@ struct RecommendationFeedRow: View {
             }
         }
         .padding(.vertical, 8)
+    }
+    
+    @ViewBuilder
+    private var musicDestination: some View {
+        switch recommendation.itemType {
+        case .artist:
+            ArtistDetailView(
+                artistId: recommendation.spotifyId,
+                artistName: recommendation.itemName,
+                artistImageURL: recommendation.imageURL.flatMap { URL(string: $0) }
+            )
+        case .album:
+            AlbumDetailView(
+                albumId: recommendation.spotifyId,
+                albumName: recommendation.itemName,
+                artistName: recommendation.artistName ?? "",
+                imageURL: recommendation.imageURL.flatMap { URL(string: $0) }
+            )
+        case .track:
+            SongDetailView(
+                trackId: recommendation.spotifyId,
+                trackName: recommendation.itemName,
+                artistName: recommendation.artistName ?? "",
+                albumName: nil,
+                albumId: nil,
+                imageURL: recommendation.imageURL.flatMap { URL(string: $0) }
+            )
+        }
     }
     
     @ViewBuilder

@@ -256,7 +256,7 @@ exports.onBuddyRequestCreated = onDocumentWritten(
       }
 
       const senderName = fromUsername || "Someone";
-      const notificationBody = `@${senderName} wants to be your buddy!`;
+      const notificationBody = `@${senderName} wants to be your buddy`;
 
       const notifications = fcmTokens.map(async (token) => {
         try {

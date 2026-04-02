@@ -80,6 +80,7 @@ struct ProfileView: View {
                     }
                     .padding()
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("profile")
             .navigationBarTitleDisplayMode(.inline)
@@ -384,13 +385,12 @@ struct ProfileView: View {
                     }
                     .buttonStyle(.plain)
                     
+                    Text("\(lyricText.count)/200")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.4))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    
                     HStack(spacing: 12) {
-                        Text("\(lyricText.count)/200")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.4))
-                        
-                        Spacer()
-                        
                         Button("Cancel") {
                             isEditingLyric = false
                             lyricText = authManager.currentUser?.favoriteLyric ?? ""
@@ -399,8 +399,13 @@ struct ProfileView: View {
                             lyricSongArtistDraft = authManager.currentUser?.favoriteLyricArtistName
                             lyricSongImageURLDraft = authManager.currentUser?.favoriteLyricSongImageURL
                         }
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white.opacity(0.8))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.12))
+                        .cornerRadius(10)
                         
                         Button(action: {
                             guard let userId = authManager.currentUser?.id else { return }
@@ -429,14 +434,18 @@ struct ProfileView: View {
                             }
                         }) {
                             if isSavingLyric {
-                                ProgressView().scaleEffect(0.7).tint(.white)
+                                ProgressView().scaleEffect(0.8).tint(.white)
                             } else {
                                 Text("Save")
-                                    .font(.caption)
+                                    .font(.subheadline)
                                     .fontWeight(.semibold)
-                                    .foregroundColor(Color(red: 0.11, green: 0.73, blue: 0.33))
+                                    .foregroundColor(.white)
                             }
                         }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color(red: 0.11, green: 0.73, blue: 0.33))
+                        .cornerRadius(10)
                         .disabled(isSavingLyric)
                     }
                 }
