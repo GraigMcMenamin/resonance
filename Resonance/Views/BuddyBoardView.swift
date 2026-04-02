@@ -934,14 +934,8 @@ struct LibraryBuddyRatingRow: View {
             .padding(.top, 4)
             
             // Inline comments section
-            if hasLoadedComments {
-                if !comments.isEmpty || showComments {
-                    commentsSection
-                }
-            } else if commentsCount > 0 {
-                // Reserve approximate height while loading so the row doesn't shift when comments arrive
-                Color.clear
-                    .frame(height: CGFloat(min(commentsCount, maxVisibleComments)) * 56)
+            if !comments.isEmpty || (!rating.hasReviewContent && showComments) {
+                commentsSection
             }
         }
         .padding(.vertical, 8)
@@ -950,6 +944,7 @@ struct LibraryBuddyRatingRow: View {
             guard !hasLoadedInteractions else { return }
             hasLoadedInteractions = true
             await loadInteractions()
+            // Auto-load comments for inline display
             await loadComments()
         }
         .onAppear {
@@ -1013,7 +1008,6 @@ struct LibraryBuddyRatingRow: View {
             withAnimation {
                 showComments.toggle()
             }
-            Task { await loadComments() }
         }
     }
     
@@ -1326,7 +1320,7 @@ struct RecommendationFeedRow: View {
             if let message = recommendation.message, !message.isEmpty {
                 HStack(alignment: .top, spacing: 4) {
                     Text("and said:")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
                     
                     Text(message)
@@ -1334,6 +1328,7 @@ struct RecommendationFeedRow: View {
                         .foregroundColor(.primary)
                         .lineLimit(2)
                 }
+                .padding(.leading, 30)
             }
             
             // Music item - tappable
