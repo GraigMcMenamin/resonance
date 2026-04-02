@@ -362,7 +362,8 @@ exports.onRatingCreated = onDocumentWritten(
         return;
       }
 
-      const buddyIds = buddiesSnapshot.docs.map((doc) => doc.id);
+      // Exclude the rater themselves — they should not receive their own rating notifications
+      const buddyIds = buddiesSnapshot.docs.map((doc) => doc.id).filter((id) => id !== userId);
       console.log(`Sending notifications to ${buddyIds.length} buddies`);
 
       // Batch fetch all buddy documents (Firestore 'in' query supports up to 10 items)

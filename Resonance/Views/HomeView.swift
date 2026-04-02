@@ -749,7 +749,7 @@ struct PendingRecommendationCard: View {
                     UIApplication.shared.open(webURL)
                 }
             }) {
-                Image(systemName: "arrow.up.right.circle")
+                Image(systemName: "play.circle.fill")
                     .font(.system(size: 24))
                     .foregroundColor(.green)
             }

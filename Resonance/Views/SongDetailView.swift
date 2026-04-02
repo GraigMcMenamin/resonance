@@ -74,27 +74,6 @@ struct SongDetailView: View {
         }
         .navigationTitle(trackName)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    if let uri = SpotifyService.spotifyURI(type: "track", id: trackId),
-                       UIApplication.shared.canOpenURL(uri) {
-                        UIApplication.shared.open(uri)
-                    } else if let webURL = SpotifyService.spotifyWebURL(type: "track", id: trackId) {
-                        UIApplication.shared.open(webURL)
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text("open in spotify")
-                            .font(.caption2)
-                            .foregroundColor(.green)
-                        Image(systemName: "arrow.up.right.circle")
-                            .foregroundColor(.green)
-                            .imageScale(.small)
-                    }
-                }
-            }
-        }
         .sheet(item: $selectedItem) { item in
             RatingSheet(item: item, ratingsManager: ratingsManager)
                 .environmentObject(authManager)
@@ -211,36 +190,18 @@ struct SongDetailView: View {
     
     private var ratingSection: some View {
         VStack(spacing: 20) {
-            // Split rating display
-            HStack(spacing: 40) {
-                // User's Rating (Left side)
-                if let userRating = getUserRating() {
-                    VStack(spacing: 6) {
-                        Text("you gave a")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.6))
-                        Text("\(userRating.percentage)%")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                        RatingBar(percentage: Double(userRating.percentage))
-                            .frame(width: 100, height: 8)
-                    }
-                }
-                
-                // Average Rating (Right side)
-                if let average = ratingsManager.getAverageRating(for: trackId) {
-                    VStack(spacing: 6) {
-                        Text("average")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.6))
-                        Text("\(Int(average))%")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                        RatingBar(percentage: average)
-                            .frame(width: 100, height: 8)
-                    }
+            // Average Rating Display
+            if let average = ratingsManager.getAverageRating(for: trackId) {
+                HStack(spacing: 12) {
+                    Text("average")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.6))
+                    Text("\(Int(average))%")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    RatingBar(percentage: average)
+                        .frame(width: 120, height: 8)
                 }
             }
             
@@ -300,6 +261,26 @@ struct SongDetailView: View {
                                 .stroke(Color.white.opacity(0.3), lineWidth: 1)
                         )
                     }
+                }
+                
+                // Open in Spotify
+                Button(action: {
+                    if let uri = SpotifyService.spotifyURI(type: "track", id: trackId),
+                       UIApplication.shared.canOpenURL(uri) {
+                        UIApplication.shared.open(uri)
+                    } else if let webURL = SpotifyService.spotifyWebURL(type: "track", id: trackId) {
+                        UIApplication.shared.open(webURL)
+                    }
+                }) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.green.opacity(0.5), lineWidth: 1)
+                        )
                 }
             }
             

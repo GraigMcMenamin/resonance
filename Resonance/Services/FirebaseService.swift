@@ -562,6 +562,28 @@ class FirebaseService: ObservableObject {
             print("[FirebaseService] Failed to update cross-rating comments/likes: \(error)")
         }
         
+        // 6. Update this user's imageURL in all their buddies' buddy records
+        do {
+            let myBuddiesSnapshot = try await db.collection("users")
+                .document(userId)
+                .collection("buddies")
+                .getDocuments()
+            
+            let batch = db.batch()
+            for doc in myBuddiesSnapshot.documents {
+                let buddyId = doc.documentID
+                let myRecordRef = db.collection("users")
+                    .document(buddyId)
+                    .collection("buddies")
+                    .document(userId)
+                batch.updateData(["imageURL": newImageURL as Any], forDocument: myRecordRef)
+            }
+            try await batch.commit()
+            print("[FirebaseService] Updated imageURL in \(myBuddiesSnapshot.documents.count) buddy records")
+        } catch {
+            print("[FirebaseService] Failed to update buddy records: \(error)")
+        }
+        
         print("[FirebaseService] Profile image propagation complete for user: \(userId)")
     }
     
@@ -768,9 +790,35 @@ class FirebaseService: ObservableObject {
             .order(by: "buddySince", descending: true)
             .getDocuments()
         
-        return snapshot.documents.compactMap { doc in
+        var buddies = snapshot.documents.compactMap { doc in
             try? doc.data(as: Buddy.self)
         }
+        
+        guard !buddies.isEmpty else { return buddies }
+        
+        // Fetch current profile images in parallel to ensure we always show the latest pfp
+        var imageMap: [String: String] = [:]
+        await withTaskGroup(of: (String, String?).self) { group in
+            for buddy in buddies {
+                group.addTask {
+                    guard let data = try? await self.db.collection("users")
+                        .document(buddy.id)
+                        .getDocument().data() else {
+                        return (buddy.id, nil)
+                    }
+                    return (buddy.id, (data["customImageURL"] as? String) ?? (data["imageURL"] as? String))
+                }
+            }
+            for await (id, url) in group {
+                if let url { imageMap[id] = url }
+            }
+        }
+        
+        for i in buddies.indices {
+            buddies[i].imageURL = imageMap[buddies[i].id]
+        }
+        
+        return buddies
     }
     
     func removeBuddy(userId: String, buddyId: String) async throws {

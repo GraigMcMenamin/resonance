@@ -162,11 +162,17 @@ struct BuddyRatingsSection: View {
         userRating != nil || !buddyRatings.isEmpty
     }
     
+    /// Buddy ratings with the current user's own entry removed to prevent duplicates
+    private var filteredBuddyRatings: [UserRating] {
+        guard let currentUserId = userRating?.userId else { return buddyRatings }
+        return buddyRatings.filter { $0.userId != currentUserId }
+    }
+    
     private var displayedRatings: [UserRating] {
-        if showAllRatings || buddyRatings.count <= 3 {
-            return buddyRatings
+        if showAllRatings || filteredBuddyRatings.count <= 3 {
+            return filteredBuddyRatings
         } else {
-            return Array(buddyRatings.prefix(3))
+            return Array(filteredBuddyRatings.prefix(3))
         }
     }
     
@@ -208,14 +214,14 @@ struct BuddyRatingsSection: View {
                     }
                     
                     // See More / See Less button
-                    if buddyRatings.count > 3 {
+                    if filteredBuddyRatings.count > 3 {
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 showAllRatings.toggle()
                             }
                         }) {
                             HStack {
-                                Text(showAllRatings ? "see less" : "see more (\\(buddyRatings.count - 3) more)")
+                                Text(showAllRatings ? "see less" : "see more (\(filteredBuddyRatings.count - 3) more)")
                                     .font(.caption)
                                     .fontWeight(.medium)
                                 Image(systemName: showAllRatings ? "chevron.up" : "chevron.down")

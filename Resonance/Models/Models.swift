@@ -605,7 +605,7 @@ struct Buddy: Codable, Identifiable, Equatable {
     var id: String // The buddy's userId
     let oderId: String
     let username: String?
-    let imageURL: String?
+    var imageURL: String?
     let buddySince: Date
 }
 

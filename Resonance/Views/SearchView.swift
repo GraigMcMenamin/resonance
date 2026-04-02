@@ -15,6 +15,7 @@ struct SearchView: View {
     
     @State private var searchText = ""
     @State private var selectedTab = 0
+    @FocusState private var isSearchFocused: Bool
     @State private var artists: [SpotifyArtist] = []
     @State private var albums: [SpotifyAlbum] = []
     @State private var tracks: [SpotifyTrack] = []
@@ -35,7 +36,7 @@ struct SearchView: View {
         NavigationView {
             VStack(spacing: 0) {
                 // Search Bar
-                SearchBar(text: $searchText, onSearch: performSearch)
+                SearchBar(text: $searchText, onSearch: performSearch, isFocused: $isSearchFocused)
                     .padding()
                 
                 // Tabs
@@ -85,6 +86,15 @@ struct SearchView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 20)
+                    .onChanged { value in
+                        // Only dismiss for downward swipes (vertical > horizontal movement)
+                        if value.translation.height > abs(value.translation.width) {
+                            isSearchFocused = false
+                        }
+                    }
+            )
             .navigationTitle("search music")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(item: $selectedItem) { item in
@@ -163,6 +173,7 @@ struct SearchView: View {
 struct SearchBar: View {
     @Binding var text: String
     let onSearch: () -> Void
+    var isFocused: FocusState<Bool>.Binding
     
     var body: some View {
         HStack {
@@ -172,6 +183,7 @@ struct SearchBar: View {
             TextField("search artists, albums, or songs...", text: $text)
                 .textFieldStyle(.plain)
                 .tint(.white)
+                .focused(isFocused)
                 .onChange(of: text) { _ in
                     onSearch()
                 }
