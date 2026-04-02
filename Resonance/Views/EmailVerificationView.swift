@@ -30,7 +30,7 @@ struct EmailVerificationView: View {
                     .foregroundColor(.white.opacity(0.8))
                 
                 // Title
-                Text("verify your email")
+                Text("CHECK YOUR SPAM!!!")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
@@ -55,7 +55,7 @@ struct EmailVerificationView: View {
                         .padding(.horizontal, 40)
                         .padding(.top, 8)
                     
-                    Text("(check your spam folder if you don't see it)")
+                    Text("(CHECK YOUR SPAMfolder if you don't see it)")
                         .font(.caption)
                         .foregroundColor(.white.opacity(0.5))
                         .multilineTextAlignment(.center)

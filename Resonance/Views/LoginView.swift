@@ -9,6 +9,7 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var authManager: AuthenticationManager
+    @State private var showPhoneAuth = false
     @State private var showEmailLogin = false
     @State private var showEmailSignup = false
     
@@ -95,15 +96,15 @@ struct LoginView: View {
                         }
                         .padding(.horizontal, 40)
                         
-                        // Email Login
+                        // Phone (primary)
                         Button(action: {
-                            showEmailLogin = true
+                            showPhoneAuth = true
                         }) {
                             HStack(spacing: 12) {
-                                Image(systemName: "envelope.fill")
+                                Image(systemName: "phone.fill")
                                     .font(.system(size: 18))
                                 
-                                Text("sign in with email")
+                                Text("continue with phone")
                                     .font(.system(size: 16, weight: .semibold))
                             }
                             .foregroundColor(.white)
@@ -117,18 +118,21 @@ struct LoginView: View {
                         .buttonStyle(.plain)
                         .padding(.horizontal, 40)
                         
-                        // Sign Up Link
-                        Button(action: {
-                            showEmailSignup = true
-                        }) {
-                            HStack(spacing: 4) {
-                                Text("don't have an account?")
-                                    .foregroundColor(.white.opacity(0.6))
-                                Text("sign up")
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
+                        // Email fallback
+                        HStack(spacing: 16) {
+                            Button(action: { showEmailLogin = true }) {
+                                Text("sign in with email")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white.opacity(0.55))
                             }
-                            .font(.system(size: 14))
+                            Text("|")
+                                .foregroundColor(.white.opacity(0.3))
+                                .font(.system(size: 13))
+                            Button(action: { showEmailSignup = true }) {
+                                Text("sign up with email")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white.opacity(0.55))
+                            }
                         }
                         
                         // Guest mode button
@@ -154,6 +158,10 @@ struct LoginView: View {
                 Spacer()
                     .frame(height: 60)
             }
+        }
+        .sheet(isPresented: $showPhoneAuth) {
+            PhoneEntryView()
+                .environmentObject(authManager)
         }
         .sheet(isPresented: $showEmailLogin) {
             EmailLoginView()
@@ -511,5 +519,238 @@ struct EmailSignupView: View {
     #Preview {
         LoginView()
             .environmentObject(AuthenticationManager())
+    }
+}
+
+// MARK: - Phone Entry View
+
+struct PhoneEntryView: View {
+    @EnvironmentObject var authManager: AuthenticationManager
+    @Environment(\.dismiss) var dismiss
+    @State private var phoneNumber = ""
+    @State private var showOTP = false
+    
+    var isFormValid: Bool {
+        phoneNumber.filter { $0.isNumber }.count >= 10
+    }
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color(red: 0.15, green: 0.08, blue: 0.18)
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 24) {
+                    // Header
+                    VStack(spacing: 8) {
+                        Image(systemName: "phone.circle.fill")
+                            .font(.system(size: 60))
+                            .foregroundColor(.white.opacity(0.8))
+                        
+                        Text("what's your number?")
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        
+                        Text("we'll text you a verification code")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .padding(.top, 40)
+                    
+                    // Phone field
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("phone number")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
+                        
+                        TextField("+1 (555) 000-0000", text: $phoneNumber)
+                            .textContentType(.telephoneNumber)
+                            .keyboardType(.phonePad)
+                            .padding()
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(12)
+                            .foregroundColor(.white)
+                        
+                        Text("include country code, e.g. +1 for US")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                    .padding(.horizontal, 30)
+                    
+                    // Send code button
+                    Button(action: {
+                        Task {
+                            await authManager.sendPhoneVerification(phoneNumber: phoneNumber)
+                            if authManager.phoneVerificationID != nil {
+                                showOTP = true
+                            }
+                        }
+                    }) {
+                        Group {
+                            if authManager.isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                            } else {
+                                Text("send code")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(isFormValid ? Color.white : Color.gray.opacity(0.3))
+                        .cornerRadius(12)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 30)
+                    .disabled(!isFormValid || authManager.isLoading)
+                    
+                    if let error = authManager.errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 30)
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        authManager.errorMessage = nil
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+            .sheet(isPresented: $showOTP) {
+                PhoneOTPView(phoneNumber: phoneNumber)
+                    .environmentObject(authManager)
+            }
+            .onChange(of: authManager.isAuthenticated) { isAuth in
+                if isAuth { dismiss() }
+            }
+        }
+    }
+}
+
+// MARK: - Phone OTP View
+
+struct PhoneOTPView: View {
+    let phoneNumber: String
+    @EnvironmentObject var authManager: AuthenticationManager
+    @Environment(\.dismiss) var dismiss
+    @State private var otpCode = ""
+    
+    var isFormValid: Bool { otpCode.count == 6 }
+    
+    var body: some View {
+        ZStack {
+            Color(red: 0.15, green: 0.08, blue: 0.18)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 24) {
+                Spacer()
+                
+                Image(systemName: "message.badge.fill")
+                    .font(.system(size: 70))
+                    .foregroundColor(.white.opacity(0.8))
+                
+                VStack(spacing: 10) {
+                    Text("enter the code")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    Text("we sent a 6-digit code to")
+                        .font(.body)
+                        .foregroundColor(.white.opacity(0.7))
+                    
+                    Text(phoneNumber)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                }
+                
+                // OTP field
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("verification code")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.7))
+                    
+                    TextField("", text: $otpCode)
+                        .textContentType(.oneTimeCode)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.center)
+                        .font(.system(size: 36, weight: .bold, design: .monospaced))
+                        .tracking(12)
+                        .padding()
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(12)
+                        .foregroundColor(.white)
+                        .onChange(of: otpCode) { newValue in
+                            let digits = newValue.filter { $0.isNumber }
+                            otpCode = String(digits.prefix(6))
+                        }
+                }
+                .padding(.horizontal, 30)
+                
+                // Verify button
+                Button(action: {
+                    Task {
+                        await authManager.verifyPhoneCode(otpCode)
+                    }
+                }) {
+                    Group {
+                        if authManager.isLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                        } else {
+                            Text("verify")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(isFormValid ? Color.white : Color.gray.opacity(0.3))
+                    .cornerRadius(12)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 30)
+                .disabled(!isFormValid || authManager.isLoading)
+                
+                // Resend
+                Button(action: {
+                    Task {
+                        await authManager.sendPhoneVerification(phoneNumber: phoneNumber)
+                    }
+                }) {
+                    Text("resend code")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                .disabled(authManager.isLoading)
+                
+                if let error = authManager.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
+                }
+                
+                Spacer()
+            }
+        }
+        .interactiveDismissDisabled(authManager.isLoading)
+        .onChange(of: authManager.isAuthenticated) { isAuth in
+            if isAuth { dismiss() }
+        }
     }
 }

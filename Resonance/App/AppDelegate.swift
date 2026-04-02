@@ -7,6 +7,7 @@
 
 import UIKit
 import FirebaseCore
+import FirebaseAuth
 import FirebaseMessaging
 
 class AppDelegate: NSObject, UIApplicationDelegate {
@@ -17,6 +18,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil
     ) -> Bool {
+        // Configure Firebase FIRST — must happen before any Auth or Messaging calls
+        FirebaseConfig.configure()
+        
+        // Force Auth singleton initialization so tokenManager is ready for APNs token
+        _ = Auth.auth()
+        
         // Request notification authorization
         UNUserNotificationCenter.current().delegate = self
         
@@ -42,8 +49,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let token = tokenParts.joined()
         print("APNs device token registered: \(token.prefix(20))...")
         
-        // Pass the token to Firebase Messaging
+        // Manually pass token to Firebase Messaging (swizzling is disabled)
         Messaging.messaging().apnsToken = deviceToken
+        
+        // Manually pass token to Firebase Auth for phone auth silent push
+        // Use .unknown so Firebase auto-detects sandbox vs production
+        Auth.auth().setAPNSToken(deviceToken, type: .unknown)
     }
     
     // Handle APNs registration failure
@@ -52,6 +63,32 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
         print("Failed to register for remote notifications: \(error)")
+    }
+    
+    // Forward remote notifications to Firebase Auth (phone auth silent push)
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        if Auth.auth().canHandleNotification(userInfo) {
+            completionHandler(.noData)
+            return
+        }
+        // Not a Firebase Auth notification — handle normally
+        completionHandler(.newData)
+    }
+    
+    // Forward URL callbacks to Firebase Auth (phone auth reCAPTCHA redirect)
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        if Auth.auth().canHandle(url) {
+            return true
+        }
+        return false
     }
 }
 

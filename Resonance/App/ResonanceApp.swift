@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import FirebaseAuth
 import FirebaseMessaging
 import UserNotifications
 
@@ -22,8 +23,8 @@ struct ResonanceApp: App {
     @StateObject private var notificationManager = NotificationManager()
     
     init() {
-        // Configure Firebase on app launch
-        FirebaseConfig.configure()
+        // Firebase is configured in AppDelegate.didFinishLaunchingWithOptions
+        // to ensure it's ready before APNs registration triggers
     }
     
     var body: some Scene {
@@ -36,6 +37,13 @@ struct ResonanceApp: App {
                 .environmentObject(notificationManager)
                 .onAppear {
                     setupNotifications()
+                }
+                .onOpenURL { url in
+                    // Handle Firebase Phone Auth reCAPTCHA redirect
+                    // SwiftUI scene-based apps receive openURL here, not in AppDelegate
+                    if Auth.auth().canHandle(url) {
+                        return
+                    }
                 }
                 .onChange(of: scenePhase) { newPhase in
                     if newPhase == .active {

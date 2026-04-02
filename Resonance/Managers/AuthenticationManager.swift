@@ -19,6 +19,7 @@ class AuthenticationManager: NSObject, ObservableObject {
     @Published var isGuestMode = false
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var phoneVerificationID: String?
     
     private var spotifyAuthSession: ASWebAuthenticationSession?
     private var authStateListener: AuthStateDidChangeListenerHandle?
@@ -47,14 +48,14 @@ class AuthenticationManager: NSObject, ObservableObject {
                     
                     if let profile = profile {
                         // For email users, check if email is verified
-                        // For Spotify users, skip email verification check
+                        // For Spotify and phone users, skip email verification check
                         if profile.authMethod == .emailPassword && !user.isEmailVerified {
                             print("Email not verified, not auto-logging in")
                             try? Auth.auth().signOut()
                             self.currentUser = nil
                             self.isAuthenticated = false
                         } else {
-                            // User is authenticated
+                            // User is authenticated (Spotify, phone, or verified email)
                             self.isAuthenticated = true
                             print("Auto-login successful")
                         }
@@ -248,6 +249,73 @@ class AuthenticationManager: NSObject, ObservableObject {
         
         try await user.sendEmailVerification()
         print("[AuthenticationManager] Verification email resent")
+    }
+    
+    // MARK: - Phone Authentication
+    
+    func sendPhoneVerification(phoneNumber: String) async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let verificationID = try await PhoneAuthProvider.provider().verifyPhoneNumber(phoneNumber, uiDelegate: self)
+            self.phoneVerificationID = verificationID
+            print("[AuthenticationManager] SMS sent to \(phoneNumber)")
+            self.isLoading = false
+        } catch {
+            print("[AuthenticationManager] Phone verification failed: \(error)")
+            self.errorMessage = "Failed to send code: \(error.localizedDescription)"
+            self.isLoading = false
+        }
+    }
+    
+    func verifyPhoneCode(_ code: String) async {
+        guard let verificationID = phoneVerificationID else {
+            errorMessage = "Verification session expired. Please try again."
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let credential = PhoneAuthProvider.provider().credential(
+                withVerificationID: verificationID,
+                verificationCode: code
+            )
+            let result = try await Auth.auth().signIn(with: credential)
+            print("[AuthenticationManager] Phone sign-in success: \(result.user.uid)")
+            
+            if let profile = await loadUserProfile(firebaseUID: result.user.uid) {
+                // Existing user — profile already loaded by loadUserProfile
+                _ = profile
+                self.isAuthenticated = true
+            } else {
+                // New user — create profile (username will be set next)
+                let user = AppUser(
+                    id: result.user.uid,
+                    firebaseUID: result.user.uid,
+                    username: nil,
+                    usernameLowercase: nil,
+                    spotifyId: nil,
+                    spotifyAccessToken: nil,
+                    spotifyRefreshToken: nil,
+                    tokenExpirationDate: nil,
+                    email: nil,
+                    imageURL: nil,
+                    authMethod: .phone,
+                    phoneNumber: result.user.phoneNumber
+                )
+                await saveUserProfile(user: user)
+                self.currentUser = user
+                self.isAuthenticated = true
+            }
+            self.isLoading = false
+            self.phoneVerificationID = nil
+        } catch {
+            print("[AuthenticationManager] Code verification failed: \(error)")
+            self.errorMessage = "Invalid code. Please try again."
+            self.isLoading = false
+        }
     }
     
     // MARK: - Username Management
@@ -561,6 +629,37 @@ class AuthenticationManager: NSObject, ObservableObject {
     }
 }
 
+// MARK: - AuthUIDelegate (Firebase Phone Auth reCAPTCHA fallback)
+
+extension AuthenticationManager: AuthUIDelegate {
+    nonisolated func present(_ viewControllerToPresent: UIViewController, animated flag: Bool, completion: (() -> Void)?) {
+        DispatchQueue.main.async {
+            Self.topViewController()?.present(viewControllerToPresent, animated: flag, completion: completion)
+        }
+    }
+    
+    nonisolated func dismiss(animated flag: Bool, completion: (() -> Void)?) {
+        DispatchQueue.main.async {
+            Self.topViewController()?.dismiss(animated: flag, completion: completion)
+        }
+    }
+    
+    /// Walk the presentation chain to find the topmost visible view controller
+    private static func topViewController() -> UIViewController? {
+        var vc = UIApplication.shared
+            .connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?
+            .windows
+            .first(where: { $0.isKeyWindow })?
+            .rootViewController
+        while let presented = vc?.presentedViewController {
+            vc = presented
+        }
+        return vc
+    }
+}
+
 // MARK: - ASWebAuthenticationPresentationContextProviding
 
 extension AuthenticationManager: ASWebAuthenticationPresentationContextProviding {
@@ -592,6 +691,8 @@ enum AuthError: LocalizedError {
     case backendError(String)
     case noUser
     case usernameNotAvailable
+    case phoneVerificationFailed
+    case invalidVerificationCode
     
     var errorDescription: String? {
         switch self {
@@ -615,6 +716,10 @@ enum AuthError: LocalizedError {
             return "No user logged in"
         case .usernameNotAvailable:
             return "Username is already taken"
+        case .phoneVerificationFailed:
+            return "Failed to send verification code"
+        case .invalidVerificationCode:
+            return "Invalid verification code"
         }
     }
 }

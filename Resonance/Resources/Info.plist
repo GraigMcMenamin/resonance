@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -10,6 +12,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>Resonance</string>
+				<string>app-1-556492808957-ios-2420e2355c385bf8a6d494</string>
 			</array>
 		</dict>
 	</array>

@@ -218,6 +218,9 @@ struct AppUser: Codable, Identifiable {
     // Auth method tracking
     var authMethod: AuthMethod = .spotify
     
+    // Phone number (for phone auth users)
+    var phoneNumber: String? = nil
+    
     // Push notification tokens (FCM)
     var fcmTokens: [String]?
     
@@ -236,6 +239,7 @@ struct AppUser: Codable, Identifiable {
     enum AuthMethod: String, Codable {
         case spotify
         case emailPassword
+        case phone
     }
     
     enum CodingKeys: String, CodingKey {
@@ -244,6 +248,7 @@ struct AppUser: Codable, Identifiable {
         case email, imageURL, customImageURL, createdAt, authMethod, fcmTokens
         case favoriteLyric, favoriteLyricSongId, favoriteLyricSongName
         case favoriteLyricArtistName, favoriteLyricSongImageURL
+        case phoneNumber
     }
 }
 
