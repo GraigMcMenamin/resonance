@@ -285,7 +285,16 @@ struct SongDetailView: View {
             }
             
             // Buddy Ratings Section
-            BuddyRatingsSection(buddyRatings: buddyRatings, buddies: buddies, userRating: getUserRating())
+            BuddyRatingsSection(
+                buddyRatings: buddyRatings,
+                buddies: buddies,
+                userRating: getUserRating(),
+                spotifyId: trackId,
+                itemName: track?.name ?? trackName,
+                artistName: track?.artistNames ?? artistName,
+                imageURL: track?.imageURL ?? imageURL,
+                reviewType: .track
+            )
         }
         .padding(.horizontal)
     }

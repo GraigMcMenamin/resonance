@@ -155,6 +155,12 @@ struct BuddyRatingsSection: View {
     let buddyRatings: [UserRating]
     let buddies: [Buddy]
     var userRating: UserRating? = nil
+    // Music item info needed to navigate to the review list
+    var spotifyId: String = ""
+    var itemName: String = ""
+    var artistName: String? = nil
+    var imageURL: URL? = nil
+    var reviewType: Review.ReviewType = .track
     @State private var showAllRatings = false
     
     /// Whether there's anything to show (user's own rating or buddy ratings)
@@ -181,6 +187,17 @@ struct BuddyRatingsSection: View {
         return buddies.first { $0.id == userId }
     }
     
+    private func reviewNavDestination(reviewId: String) -> ReviewsListView {
+        ReviewsListView(
+            spotifyId: spotifyId,
+            itemName: itemName,
+            artistName: artistName,
+            imageURL: imageURL,
+            reviewType: reviewType,
+            scrollToReviewId: reviewId
+        )
+    }
+    
     var body: some View {
         if hasAnyRatings {
             VStack(alignment: .leading, spacing: 12) {
@@ -197,20 +214,26 @@ struct BuddyRatingsSection: View {
                             rating: userRating,
                             username: userRating.username,
                             imageURL: userRating.userImageURL,
-                            isCurrentUser: true
+                            isCurrentUser: true,
+                            profileDestination: AnyView(ProfileView(isEmbedded: true)),
+                            reviewDestination: userRating.hasReviewContent
+                                ? AnyView(reviewNavDestination(reviewId: userRating.id))
+                                : nil
                         )
                     }
                     
                     ForEach(displayedRatings) { rating in
                         let buddy = buddyInfo(for: rating.userId)
-                        NavigationLink(destination: BuddyProfileDestination(userId: rating.userId)) {
-                            BuddyRatingRow(
-                                rating: rating,
-                                username: buddy?.username ?? rating.username,
-                                imageURL: buddy?.imageURL ?? rating.userImageURL
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        BuddyRatingRow(
+                            rating: rating,
+                            username: buddy?.username ?? rating.username,
+                            imageURL: buddy?.imageURL ?? rating.userImageURL,
+                            isCurrentUser: false,
+                            profileDestination: AnyView(BuddyProfileDestination(userId: rating.userId)),
+                            reviewDestination: rating.hasReviewContent
+                                ? AnyView(reviewNavDestination(reviewId: rating.id))
+                                : nil
+                        )
                     }
                     
                     // See More / See Less button
@@ -276,12 +299,18 @@ struct BuddyProfileDestination: View {
     }
 }
 
-/// A single row displaying a buddy's rating
+/// A single row displaying a buddy's rating with split-tap navigation.
+/// Tapping the profile area navigates to the user's profile.
+/// Tapping the review text (if present) navigates to the review list scrolled to that review.
 struct BuddyRatingRow: View {
     let rating: UserRating
     let username: String?
     let imageURL: String?
     var isCurrentUser: Bool = false
+    /// When provided, the profile header section becomes a NavigationLink to this destination.
+    var profileDestination: AnyView? = nil
+    /// When provided, the review text section becomes a NavigationLink to this destination.
+    var reviewDestination: AnyView? = nil
     
     private var ratingColor: Color {
         colorForPercentage(Double(rating.percentage))
@@ -305,83 +334,31 @@ struct BuddyRatingRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
-                // Buddy profile picture
-                if let imageURL = profileImageURL {
-                    CustomAsyncImage(url: imageURL) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 32, height: 32)
-                                .clipShape(Circle())
-                        default:
-                            Circle()
-                                .fill(Color.white.opacity(0.1))
-                                .frame(width: 32, height: 32)
-                                .overlay(
-                                    Image(systemName: "person.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.white.opacity(0.5))
-                                )
-                        }
-                    }
-                } else {
-                    Circle()
-                        .fill(Color.white.opacity(0.1))
-                        .frame(width: 32, height: 32)
-                        .overlay(
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(.white.opacity(0.5))
-                        )
+            // Profile section — tappable when profileDestination is provided
+            if let profileDest = profileDestination {
+                NavigationLink(destination: profileDest) {
+                    profileHeaderContent
                 }
-                
-                // Buddy username (with @ prefix if it's a username)
-                Text(displayUsername)
-                    .font(.subheadline)
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                
-                Spacer()
-                
-                // Rating with bar
-                HStack(spacing: 8) {
-                    Text("\(rating.percentage)%")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(ratingColor)
-                    
-                    RatingBarMini(percentage: Double(rating.percentage))
-                        .frame(width: 50, height: 6)
-                }
-                
-                // Chevron to indicate tappable
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.3))
+                .buttonStyle(.plain)
+            } else {
+                profileHeaderContent
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
             
-            // Review content if it exists and is SHORT (< 150 characters)
-            if rating.hasReviewContent, 
-               let reviewContent = rating.reviewContent,
-               rating.reviewLength == .short {
-                VStack(alignment: .leading, spacing: 4) {
+            // Review section — show for both short and long reviews
+            if rating.hasReviewContent, let reviewContent = rating.reviewContent {
+                if let reviewDest = reviewDestination {
                     Divider()
                         .background(Color.white.opacity(0.1))
                         .padding(.horizontal, 12)
-                    
-                    Text(reviewContent)
-                        .font(.footnote)
-                        .foregroundColor(.white.opacity(0.8))
-                        .lineLimit(4)
-                        .multilineTextAlignment(.leading)
+                    NavigationLink(destination: reviewDest) {
+                        reviewTextContent(reviewContent)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Divider()
+                        .background(Color.white.opacity(0.1))
                         .padding(.horizontal, 12)
-                        .padding(.top, 6)
-                        .padding(.bottom, 10)
+                    reviewTextContent(reviewContent)
                 }
             }
         }
@@ -389,5 +366,89 @@ struct BuddyRatingRow: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color.white.opacity(0.05))
         )
+    }
+    
+    private var profileHeaderContent: some View {
+        HStack(spacing: 12) {
+            // Profile picture
+            if let imageURL = profileImageURL {
+                CustomAsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 32, height: 32)
+                            .clipShape(Circle())
+                    default:
+                        Circle()
+                            .fill(Color.white.opacity(0.1))
+                            .frame(width: 32, height: 32)
+                            .overlay(
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white.opacity(0.5))
+                            )
+                    }
+                }
+            } else {
+                Circle()
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: 32, height: 32)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.5))
+                    )
+            }
+            
+            // Username
+            Text(displayUsername)
+                .font(.subheadline)
+                .foregroundColor(.white)
+                .lineLimit(1)
+            
+            Spacer()
+            
+            // Rating with bar
+            HStack(spacing: 8) {
+                Text("\(rating.percentage)%")
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(ratingColor)
+                
+                RatingBarMini(percentage: Double(rating.percentage))
+                    .frame(width: 50, height: 6)
+            }
+            
+            // Chevron to indicate tappable profile area
+            if profileDestination != nil {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.3))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+    
+    private func reviewTextContent(_ content: String) -> some View {
+        HStack(spacing: 6) {
+            Text(content)
+                .font(.footnote)
+                .foregroundColor(.white.opacity(0.8))
+                .lineLimit(4)
+                .multilineTextAlignment(.leading)
+            Spacer()
+            // Small indicator that review text is tappable
+            if reviewDestination != nil {
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.25))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 10)
     }
 }

@@ -31,12 +31,24 @@ struct ProfileView: View {
     @State private var lyricSongNameDraft: String? = nil
     @State private var lyricSongArtistDraft: String? = nil
     @State private var lyricSongImageURLDraft: String? = nil
-    
+    /// Set to `true` when ProfileView is pushed onto an existing NavigationStack/NavigationView
+    /// so it doesn't wrap itself in an extra NavigationView.
+    var isEmbedded: Bool = false
+
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color(red: 0.15, green: 0.08, blue: 0.18)
-                    .ignoresSafeArea()
+        if isEmbedded {
+            profileInnerContent
+        } else {
+            NavigationView {
+                profileInnerContent
+            }
+        }
+    }
+
+    private var profileInnerContent: some View {
+        ZStack {
+            Color(red: 0.15, green: 0.08, blue: 0.18)
+                .ignoresSafeArea()
                 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -144,9 +156,8 @@ struct ProfileView: View {
                     await ratingsManager.refreshUserRatings(userId: userId)
                 }
             }
-        }
     }
-    
+
     @ViewBuilder
     private func userProfileHeader() -> some View {
         VStack(spacing: 16) {

@@ -311,7 +311,16 @@ struct AlbumDetailView: View {
             }
             
             // Buddy Ratings Section
-            BuddyRatingsSection(buddyRatings: buddyRatings, buddies: buddies, userRating: getUserRating())
+            BuddyRatingsSection(
+                buddyRatings: buddyRatings,
+                buddies: buddies,
+                userRating: getUserRating(),
+                spotifyId: albumId,
+                itemName: album?.name ?? albumName,
+                artistName: album?.artistNames ?? artistName,
+                imageURL: album?.imageURL ?? imageURL,
+                reviewType: .album
+            )
         }
         .padding(.horizontal)
     }

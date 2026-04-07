@@ -255,7 +255,16 @@ struct ArtistDetailView: View {
             }
             
             // Buddy Ratings Section
-            BuddyRatingsSection(buddyRatings: buddyRatings, buddies: buddies, userRating: getUserRating())
+            BuddyRatingsSection(
+                buddyRatings: buddyRatings,
+                buddies: buddies,
+                userRating: getUserRating(),
+                spotifyId: artistId,
+                itemName: artist?.name ?? artistName,
+                artistName: nil,
+                imageURL: artist?.imageURL ?? artistImageURL,
+                reviewType: .artist
+            )
         }
         .padding(.horizontal)
     }
