@@ -187,14 +187,15 @@ struct BuddyRatingsSection: View {
         return buddies.first { $0.id == userId }
     }
     
-    private func reviewNavDestination(reviewId: String) -> ReviewsListView {
+    private func reviewNavDestination(reviewId: String, reviewLength: Review.ReviewLength) -> ReviewsListView {
         ReviewsListView(
             spotifyId: spotifyId,
             itemName: itemName,
             artistName: artistName,
             imageURL: imageURL,
             reviewType: reviewType,
-            scrollToReviewId: reviewId
+            scrollToReviewId: reviewId,
+            initialSelectedLength: reviewLength
         )
     }
     
@@ -217,7 +218,7 @@ struct BuddyRatingsSection: View {
                             isCurrentUser: true,
                             profileDestination: AnyView(ProfileView(isEmbedded: true)),
                             reviewDestination: userRating.hasReviewContent
-                                ? AnyView(reviewNavDestination(reviewId: userRating.id))
+                                ? AnyView(reviewNavDestination(reviewId: userRating.id, reviewLength: userRating.reviewLength ?? .short))
                                 : nil
                         )
                     }
@@ -231,7 +232,7 @@ struct BuddyRatingsSection: View {
                             isCurrentUser: false,
                             profileDestination: AnyView(BuddyProfileDestination(userId: rating.userId)),
                             reviewDestination: rating.hasReviewContent
-                                ? AnyView(reviewNavDestination(reviewId: rating.id))
+                                ? AnyView(reviewNavDestination(reviewId: rating.id, reviewLength: rating.reviewLength ?? .short))
                                 : nil
                         )
                     }

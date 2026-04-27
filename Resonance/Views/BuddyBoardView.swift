@@ -26,6 +26,8 @@ struct BuddyBoardView: View {
     @State private var deepLinkExpandCommentRatingId: String? = nil
     @State private var deepLinkScrollToCommentId: String? = nil
     @State private var pendingCommentScrollData: (ratingId: String, commentId: String)? = nil
+    @State private var hasBuddyFeedLoaded = false
+    @State private var myRatingsAnchorId: String? = nil
     
     var body: some View {
         NavigationView {
@@ -58,22 +60,38 @@ struct BuddyBoardView: View {
             .navigationTitle(selectedSection == .myRatings ? "my board" : "buddy board")
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: selectedSection) { newValue in
-                if newValue == .buddyReviews {
+                if newValue == .buddyReviews && !hasBuddyFeedLoaded {
                     Task {
                         await loadBuddyRatings()
                     }
                 }
             }
             .onChange(of: buddyManager.buddies) { _ in
-                // Reload buddy ratings when buddies list changes
+                // Reload buddy ratings when buddies list changes (force refresh)
                 if selectedSection == .buddyReviews {
+                    hasBuddyFeedLoaded = false
                     Task {
                         await loadBuddyRatings()
                     }
                 }
             }
+            .onChange(of: ratingsManager.allRatings) { _ in
+                // Silently rebuild feed when ratings update (no loading indicator = no scroll reset)
+                if hasBuddyFeedLoaded {
+                    let buddyIdSet = Set(buddyManager.buddies.map { $0.id })
+                    let currentUserId = authManager.currentUser?.id ?? ""
+                    buddyRatings = ratingsManager.allRatings
+                        .filter { buddyIdSet.contains($0.userId) || $0.userId == currentUserId }
+                        .sorted { $0.dateRated > $1.dateRated }
+                    buildBuddyFeed()
+                }
+            }
+            .onChange(of: selectedFilter) { _ in
+                // Clear my ratings scroll anchor when filter changes
+                myRatingsAnchorId = nil
+            }
             .onAppear {
-                if selectedSection == .buddyReviews {
+                if selectedSection == .buddyReviews && !hasBuddyFeedLoaded {
                     Task {
                         await loadBuddyRatings()
                     }
@@ -183,54 +201,73 @@ struct BuddyBoardView: View {
             .pickerStyle(.segmented)
             .padding()
             
-            // Always use a List so pull-to-refresh works in all states
-            List {
-                if filteredRatings.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "star.slash")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray)
-                        Text("no ratings yet")
-                            .font(.headline)
-                            .foregroundColor(.secondary)
-                        Text("search and rate your favorite music")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 60)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                } else {
-                    ForEach(filteredRatings) { rating in
-                        NavigationLink(destination: destinationView(for: rating)) {
-                            RatingRow(rating: rating)
+            // Wrap in ScrollViewReader so we can restore position after navigation
+            ScrollViewReader { proxy in
+                // Always use a List so pull-to-refresh works in all states
+                List {
+                    if filteredRatings.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "star.slash")
+                                .font(.system(size: 60))
+                                .foregroundColor(.gray)
+                            Text("no ratings yet")
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+                            Text("search and rate your favorite music")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
                         }
-                        .onAppear {
-                            if rating.id == filteredRatings.last?.id,
-                               ratingsManager.hasMoreRatings,
-                               let userId = authManager.currentUser?.id {
-                                Task { await ratingsManager.loadMoreUserRatings(userId: userId) }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 60)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    } else {
+                        ForEach(filteredRatings) { rating in
+                            NavigationLink(destination: destinationView(for: rating)) {
+                                RatingRow(rating: rating)
+                            }
+                            .id(rating.id)
+                            .simultaneousGesture(
+                                TapGesture().onEnded {
+                                    myRatingsAnchorId = rating.id
+                                }
+                            )
+                            .onAppear {
+                                if rating.id == filteredRatings.last?.id,
+                                   ratingsManager.hasMoreRatings,
+                                   let userId = authManager.currentUser?.id {
+                                    Task { await ratingsManager.loadMoreUserRatings(userId: userId) }
+                                }
+                            }
+                        }
+                        .onDelete(perform: deleteRatings)
+
+                        if ratingsManager.isLoading && !ratingsManager.ratings.isEmpty {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                Spacer()
+                            }
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                        }
+                    }
+                }
+                .listStyle(.plain)
+                .refreshable {
+                    if let userId = authManager.currentUser?.id {
+                        await ratingsManager.refreshUserRatings(userId: userId)
+                    }
+                }
+                .onAppear {
+                    // Restore scroll position when returning from a detail view
+                    if let anchor = myRatingsAnchorId {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            withAnimation(.none) {
+                                proxy.scrollTo(anchor, anchor: .center)
                             }
                         }
                     }
-                    .onDelete(perform: deleteRatings)
-
-                    if ratingsManager.isLoading && !ratingsManager.ratings.isEmpty {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                            Spacer()
-                        }
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                    }
-                }
-            }
-            .listStyle(.plain)
-            .refreshable {
-                if let userId = authManager.currentUser?.id {
-                    await ratingsManager.refreshUserRatings(userId: userId)
                 }
             }
         }
@@ -320,7 +357,12 @@ struct BuddyBoardView: View {
     }
     
     private func loadBuddyRatings() async {
-        isLoadingBuddyRatings = true
+        // Only show the loading spinner on the very first load (when there's nothing to show yet).
+        // On subsequent reloads the existing list stays visible, preserving scroll position.
+        let showLoading = buddyFeedItems.isEmpty
+        if showLoading {
+            isLoadingBuddyRatings = true
+        }
         
         // Ensure buddies are loaded first
         if buddyManager.buddies.isEmpty, let userId = authManager.currentUser?.id {
@@ -363,6 +405,7 @@ struct BuddyBoardView: View {
         buildBuddyFeed()
         
         isLoadingBuddyRatings = false
+        hasBuddyFeedLoaded = true
         
         // Apply any pending scroll from a deep link that arrived before data loaded
         if let scrollId = pendingScrollId {

@@ -95,15 +95,15 @@ struct AuthenticatedView: View {
                 .ignoresSafeArea()
             
             TabView(selection: $selectedTab) {
-                HomeView()
+                BuddyBoardView()
                     .tabItem {
-                        Label("home", systemImage: "house.fill")
+                        Label("buddy board", systemImage: "music.quarternote.3")
                     }
                     .tag(0)
                 
-                BuddyBoardView()
+                HomeView()
                     .tabItem {
-                        Label("buddy board", systemImage: "music.note.list")
+                        Label("charts", systemImage: "chart.bar.fill")
                     }
                     .tag(1)
                 
@@ -171,11 +171,11 @@ struct AuthenticatedView: View {
     private func applyDeepLink(_ deepLink: NotificationDeepLink) {
         switch deepLink {
         case .homePage:
-            selectedTab = 0
+            selectedTab = 1
             notificationManager.pendingDeepLink = nil
         case .buddyRatingFeed, .reviewsList:
             // Switch to the BuddyBoard tab; BuddyBoardView handles scroll/navigation and clears the link itself
-            selectedTab = 1
+            selectedTab = 0
         case .profilePage:
             selectedTab = 3
             notificationManager.pendingDeepLink = nil
