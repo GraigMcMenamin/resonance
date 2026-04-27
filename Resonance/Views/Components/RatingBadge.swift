@@ -264,6 +264,7 @@ struct BuddyRatingsSection: View {
 /// Destination view that fetches user data and shows their profile
 struct BuddyProfileDestination: View {
     let userId: String
+    @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
     @State private var user: AppUser?
     @State private var isLoading = true
@@ -277,6 +278,8 @@ struct BuddyProfileDestination: View {
                     ProgressView()
                         .tint(.white)
                 }
+            } else if authManager.currentUser?.id == userId {
+                ProfileView()
             } else if let user = user {
                 OtherUserProfileView(user: user)
             } else {
@@ -289,10 +292,13 @@ struct BuddyProfileDestination: View {
             }
         }
         .task {
-            do {
-                user = try await firebaseService.getUserProfile(userId: userId)
-            } catch {
-                print("Error fetching user: \(error)")
+            // Only fetch if it's not the current user
+            if authManager.currentUser?.id != userId {
+                do {
+                    user = try await firebaseService.getUserProfile(userId: userId)
+                } catch {
+                    print("Error fetching user: \(error)")
+                }
             }
             isLoading = false
         }

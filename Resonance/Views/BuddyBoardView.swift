@@ -749,6 +749,7 @@ struct LibraryBuddyRatingRow: View {
     @State private var mentionSuggestions: [AppUser] = []
     @State private var showMentionSuggestions = false
     @State private var mentionSearchTask: Task<Void, Never>? = nil
+    @State private var isReviewTruncated = false
     
     private let maxVisibleComments = 3
     
@@ -916,19 +917,43 @@ struct LibraryBuddyRatingRow: View {
             }
             .buttonStyle(.plain)
             
-            // Review content (if they wrote one)
+            // Review content (if they wrote one) — tappable to navigate to reviews list
             if rating.hasReviewContent, let content = rating.reviewContent {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("review:")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
-                    Text(content)
-                        .font(.subheadline)
-                        .foregroundColor(.primary)
-                        .lineLimit(4)
-                        .multilineTextAlignment(.leading)
+                Button(action: { navigateToReviews = true }) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("review:")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                        Text(content)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            .lineLimit(4)
+                            .multilineTextAlignment(.leading)
+                            .background(
+                                GeometryReader { truncatedGeo in
+                                    Text(content)
+                                        .font(.subheadline)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .hidden()
+                                        .background(
+                                            GeometryReader { fullGeo in
+                                                Color.clear.onAppear {
+                                                    isReviewTruncated = fullGeo.size.height > truncatedGeo.size.height + 1
+                                                }
+                                            }
+                                        )
+                                }
+                            )
+                        if isReviewTruncated {
+                            Text("see more >")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                        }
+                    }
                 }
+                .buttonStyle(.plain)
                 .padding(.top, 4)
             }
             
@@ -1042,7 +1067,8 @@ struct LibraryBuddyRatingRow: View {
             artistName: rating.artistName,
             imageURL: rating.imageURL.flatMap { URL(string: $0) },
             reviewType: reviewType,
-            scrollToReviewId: rating.id
+            scrollToReviewId: rating.id,
+            initialSelectedLength: rating.reviewLength ?? .short
         )
     }
     

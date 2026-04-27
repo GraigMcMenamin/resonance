@@ -15,6 +15,7 @@ struct ReviewsListView: View {
     let reviewType: Review.ReviewType
     var scrollToReviewId: String? = nil
     var scrollToCommentId: String? = nil
+    var initialSelectedLength: Review.ReviewLength = .short
     
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
@@ -24,8 +25,20 @@ struct ReviewsListView: View {
     @State private var reviewLikeCounts: [String: Int] = [:]
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var selectedLength: Review.ReviewLength = .short
+    @State private var selectedLength: Review.ReviewLength
     @State private var didScrollToTarget = false
+    
+    init(spotifyId: String, itemName: String, artistName: String?, imageURL: URL?, reviewType: Review.ReviewType, scrollToReviewId: String? = nil, scrollToCommentId: String? = nil, initialSelectedLength: Review.ReviewLength = .short) {
+        self.spotifyId = spotifyId
+        self.itemName = itemName
+        self.artistName = artistName
+        self.imageURL = imageURL
+        self.reviewType = reviewType
+        self.scrollToReviewId = scrollToReviewId
+        self.scrollToCommentId = scrollToCommentId
+        self.initialSelectedLength = initialSelectedLength
+        _selectedLength = State(initialValue: initialSelectedLength)
+    }
     
     var body: some View {
         ZStack {
