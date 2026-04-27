@@ -14,10 +14,10 @@ import FirebaseMessaging
 // MARK: - Deep Link Model
 
 enum NotificationDeepLink: Equatable {
-    /// Navigate to buddy ratings tab, optionally scroll to a specific feed item
-    case buddyRatingFeed(scrollToId: String?)
-    /// Navigate to ReviewsListView for a specific item
-    case reviewsList(spotifyId: String, itemName: String, artistName: String?, imageURL: String?, itemType: String, scrollToReviewId: String?)
+    /// Navigate to buddy ratings tab, optionally scroll to a specific feed item and/or comment
+    case buddyRatingFeed(scrollToId: String?, scrollToCommentId: String?)
+    /// Navigate to ReviewsListView for a specific item, optionally scrolling to a review and/or comment
+    case reviewsList(spotifyId: String, itemName: String, artistName: String?, imageURL: String?, itemType: String, scrollToReviewId: String?, scrollToCommentId: String?)
     /// Navigate to home page (for recommendation notifications)
     case homePage
     /// Navigate to profile page (for buddy request notifications)
@@ -166,6 +166,8 @@ class NotificationManager: NSObject, ObservableObject {
             handleLikeTap(userInfo)
         case "comment":
             handleCommentTap(userInfo)
+        case "reply", "mention":
+            handleReplyOrMentionTap(userInfo)
         case "buddy_request":
             handleBuddyRequestTap(userInfo)
         default:
@@ -188,7 +190,7 @@ class NotificationManager: NSObject, ObservableObject {
     private func handleBuddyRatingTap(_ userInfo: [AnyHashable: Any]) {
         let ratingId = userInfo["ratingId"] as? String
         let scrollId = ratingId.map { "rating_\($0)" }
-        pendingDeepLink = .buddyRatingFeed(scrollToId: scrollId)
+        pendingDeepLink = .buddyRatingFeed(scrollToId: scrollId, scrollToCommentId: nil)
     }
     
     private func handleLikeTap(_ userInfo: [AnyHashable: Any]) {
@@ -198,12 +200,12 @@ class NotificationManager: NSObject, ObservableObject {
         
         if hasReview && !isBuddy {
             // Written review liked by non-buddy → reviews list page
-            setReviewsListDeepLink(from: userInfo)
+            setReviewsListDeepLink(from: userInfo, scrollToCommentId: nil)
         } else {
             // Buddy liked (written or not), or non-buddy liked percentage-only → buddy ratings page, scroll to it
             let ratingId = userInfo["ratingId"] as? String
             let scrollId = ratingId.map { "rating_\($0)" }
-            pendingDeepLink = .buddyRatingFeed(scrollToId: scrollId)
+            pendingDeepLink = .buddyRatingFeed(scrollToId: scrollId, scrollToCommentId: nil)
         }
     }
     
@@ -211,19 +213,33 @@ class NotificationManager: NSObject, ObservableObject {
         let commenterId = userInfo["commenterId"] as? String ?? ""
         let hasReview = userInfo["hasReviewContent"] as? String == "true"
         let isBuddy = buddyManager?.buddies.contains(where: { $0.id == commenterId }) ?? false
+        let commentId = userInfo["commentId"] as? String
         
         if hasReview {
-            // Written review commented on (by buddy or non-buddy) → reviews list page
-            setReviewsListDeepLink(from: userInfo)
+            // Written review commented on → reviews list page, scroll to the review and comment
+            setReviewsListDeepLink(from: userInfo, scrollToCommentId: commentId)
         } else {
-            // Percentage-only rating commented on → buddy ratings page, scroll to it
+            // Percentage-only rating commented on → buddy ratings page
             let ratingId = userInfo["ratingId"] as? String
             let scrollId = ratingId.map { "rating_\($0)" }
-            pendingDeepLink = .buddyRatingFeed(scrollToId: scrollId)
+            pendingDeepLink = .buddyRatingFeed(scrollToId: scrollId, scrollToCommentId: commentId)
         }
     }
     
-    private func setReviewsListDeepLink(from userInfo: [AnyHashable: Any]) {
+    private func handleReplyOrMentionTap(_ userInfo: [AnyHashable: Any]) {
+        let hasReview = userInfo["hasReviewContent"] as? String == "true"
+        let commentId = userInfo["commentId"] as? String
+        
+        if hasReview {
+            setReviewsListDeepLink(from: userInfo, scrollToCommentId: commentId)
+        } else {
+            let ratingId = userInfo["ratingId"] as? String
+            let scrollId = ratingId.map { "rating_\($0)" }
+            pendingDeepLink = .buddyRatingFeed(scrollToId: scrollId, scrollToCommentId: commentId)
+        }
+    }
+    
+    private func setReviewsListDeepLink(from userInfo: [AnyHashable: Any], scrollToCommentId: String?) {
         let spotifyId = userInfo["spotifyId"] as? String ?? ""
         let itemName = userInfo["itemName"] as? String ?? "Unknown"
         let artistName = userInfo["artistName"] as? String
@@ -237,7 +253,8 @@ class NotificationManager: NSObject, ObservableObject {
             artistName: artistName,
             imageURL: imageURL,
             itemType: itemType,
-            scrollToReviewId: ratingId
+            scrollToReviewId: ratingId,
+            scrollToCommentId: scrollToCommentId
         )
     }
     

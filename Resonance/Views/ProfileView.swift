@@ -31,6 +31,10 @@ struct ProfileView: View {
     @State private var lyricSongNameDraft: String? = nil
     @State private var lyricSongArtistDraft: String? = nil
     @State private var lyricSongImageURLDraft: String? = nil
+    @State private var isEditingUsername = false
+    @State private var usernameDraft: String = ""
+    @State private var isSavingUsername = false
+    @State private var usernameErrorMessage: String? = nil
     /// Set to `true` when ProfileView is pushed onto an existing NavigationStack/NavigationView
     /// so it doesn't wrap itself in an extra NavigationView.
     var isEmbedded: Bool = false
@@ -305,16 +309,106 @@ struct ProfileView: View {
                 }
             
             // Username
-            if let username = authManager.currentUser?.username {
-                Text("@\(username)")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
+            if isEditingUsername {
+                VStack(spacing: 10) {
+                    TextField("username", text: $usernameDraft)
+                        .textFieldStyle(.plain)
+                        .padding(10)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(8)
+                        .foregroundColor(.white)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .onChange(of: usernameDraft) { newValue in
+                            // Strip disallowed characters live
+                            let filtered = newValue.filter { $0.isLetter || $0.isNumber || $0 == "_" }
+                            if filtered != newValue { usernameDraft = filtered }
+                            if usernameDraft.count > 30 { usernameDraft = String(usernameDraft.prefix(30)) }
+                            usernameErrorMessage = nil
+                        }
+                    
+                    if let err = usernameErrorMessage {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundColor(.red.opacity(0.8))
+                    }
+                    
+                    Text("\(usernameDraft.count)/30")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.4))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    
+                    HStack(spacing: 12) {
+                        Button("Cancel") {
+                            isEditingUsername = false
+                            usernameErrorMessage = nil
+                        }
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white.opacity(0.8))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.12))
+                        .cornerRadius(10)
+                        
+                        Button(action: {
+                            isSavingUsername = true
+                            usernameErrorMessage = nil
+                            Task {
+                                do {
+                                    try await authManager.changeUsername(usernameDraft)
+                                    isEditingUsername = false
+                                } catch AuthError.usernameNotAvailable {
+                                    usernameErrorMessage = "That username is already taken"
+                                } catch AuthError.invalidUsername {
+                                    usernameErrorMessage = "3–30 characters, letters/numbers/underscores only"
+                                } catch {
+                                    usernameErrorMessage = error.localizedDescription
+                                }
+                                isSavingUsername = false
+                            }
+                        }) {
+                            if isSavingUsername {
+                                ProgressView().scaleEffect(0.8).tint(.white)
+                            } else {
+                                Text("Save")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color(red: 0.11, green: 0.73, blue: 0.33))
+                        .cornerRadius(10)
+                        .disabled(isSavingUsername || usernameDraft.count < 3)
+                    }
+                }
+                .padding(.horizontal, 4)
             } else {
-                Text("User")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white.opacity(0.5))
+                Button(action: {
+                    usernameDraft = authManager.currentUser?.username ?? ""
+                    usernameErrorMessage = nil
+                    isEditingUsername = true
+                }) {
+                    HStack(spacing: 6) {
+                        if let username = authManager.currentUser?.username {
+                            Text("@\(username)")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        } else {
+                            Text("User")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                        Image(systemName: "pencil.circle.fill")
+                            .font(.title3)
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                }
+                .buttonStyle(.plain)
             }
             
             // Favorite Lyric

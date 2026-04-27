@@ -355,6 +355,58 @@ class AuthenticationManager: NSObject, ObservableObject {
         print("[AuthenticationManager] Username set: @\(username)")
     }
     
+    func changeUsername(_ username: String) async throws {
+        guard let user = currentUser else {
+            throw AuthError.noUser
+        }
+        
+        // Validate format locally before hitting the server
+        let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 3, trimmed.count <= 30 else {
+            throw AuthError.invalidUsername
+        }
+        let allowedCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_"))
+        guard trimmed.unicodeScalars.allSatisfy({ allowedCharacters.contains($0) }) else {
+            throw AuthError.invalidUsername
+        }
+        
+        // Get Firebase ID token for authentication
+        guard let firebaseUser = Auth.auth().currentUser else {
+            throw AuthError.noUser
+        }
+        let idToken = try await firebaseUser.getIDToken()
+        
+        guard let url = URL(string: "\(SpotifyConfig.cloudFunctionBaseURL)/changeUsername") else {
+            throw AuthError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["newUsername": trimmed])
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.backendError("No HTTP response")
+        }
+        
+        if httpResponse.statusCode == 409 {
+            throw AuthError.usernameNotAvailable
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            let body = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw AuthError.backendError(body)
+        }
+        
+        // Update local state
+        self.currentUser?.username = trimmed
+        self.currentUser?.usernameLowercase = trimmed.lowercased()
+        print("[AuthenticationManager] Username changed: @\(trimmed)")
+    }
+    
     // MARK: - User Profile Management
     
     private func loadUserProfile(firebaseUID: String) async -> AppUser? {
@@ -693,6 +745,7 @@ enum AuthError: LocalizedError {
     case usernameNotAvailable
     case phoneVerificationFailed
     case invalidVerificationCode
+    case invalidUsername
     
     var errorDescription: String? {
         switch self {
@@ -720,6 +773,8 @@ enum AuthError: LocalizedError {
             return "Failed to send verification code"
         case .invalidVerificationCode:
             return "Invalid verification code"
+        case .invalidUsername:
+            return "Username must be 3–30 characters and may only contain letters, numbers, and underscores"
         }
     }
 }

@@ -472,12 +472,16 @@ struct ReviewComment: Codable, Identifiable, Equatable {
     let userId: String // User who wrote the comment
     let username: String? // Username of the commenter
     let userImageURL: String? // Profile image of the commenter
-    let content: String // The comment text (max 100 characters)
+    let content: String // The comment text (max 150 characters)
     let createdAt: Date
     var updatedAt: Date?
     
     // Aggregated count (maintained by Cloud Functions)
     var likesCount: Int?
+    
+    // Reply support
+    var replyToCommentId: String? // If this is a reply, the parent comment's ID
+    var replyToUsername: String? // Username of the person being replied to
     
     static func == (lhs: ReviewComment, rhs: ReviewComment) -> Bool {
         lhs.id == rhs.id &&

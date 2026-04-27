@@ -23,6 +23,9 @@ struct BuddyBoardView: View {
     @State private var pendingScrollId: String? = nil
     @State private var navigateToDeepLinkReviews = false
     @State private var deepLinkReviewsDestination: NotificationDeepLink? = nil
+    @State private var deepLinkExpandCommentRatingId: String? = nil
+    @State private var deepLinkScrollToCommentId: String? = nil
+    @State private var pendingCommentScrollData: (ratingId: String, commentId: String)? = nil
     
     var body: some View {
         NavigationView {
@@ -90,7 +93,7 @@ struct BuddyBoardView: View {
     
     @ViewBuilder
     private var deepLinkReviewsView: some View {
-        if case .reviewsList(let spotifyId, let itemName, let artistName, let imageURL, let itemType, let scrollToReviewId) = deepLinkReviewsDestination {
+        if case .reviewsList(let spotifyId, let itemName, let artistName, let imageURL, let itemType, let scrollToReviewId, let scrollToCommentId) = deepLinkReviewsDestination {
             let reviewType: Review.ReviewType = {
                 switch itemType {
                 case "artist": return .artist
@@ -104,7 +107,8 @@ struct BuddyBoardView: View {
                 artistName: artistName,
                 imageURL: imageURL.flatMap { URL(string: $0) },
                 reviewType: reviewType,
-                scrollToReviewId: scrollToReviewId
+                scrollToReviewId: scrollToReviewId,
+                scrollToCommentId: scrollToCommentId
             )
         } else {
             EmptyView()
@@ -126,7 +130,7 @@ struct BuddyBoardView: View {
         notificationManager.pendingDeepLink = nil
         
         switch deepLink {
-        case .buddyRatingFeed(let scrollToId):
+        case .buddyRatingFeed(let scrollToId, let scrollToCommentId):
             selectedSection = .buddyReviews
             if let scrollToId = scrollToId {
                 // If feed is already loaded, scroll immediately; otherwise store for later
@@ -135,6 +139,18 @@ struct BuddyBoardView: View {
                 } else {
                     // Feed not loaded yet - store and it will be applied after load
                     pendingScrollId = scrollToId
+                }
+            }
+            // If there's a comment to scroll to, extract the ratingId from the feed item scroll ID
+            if let commentId = scrollToCommentId,
+               let ratingId = scrollToId.map({ id in
+                   id.hasPrefix("rating_") ? String(id.dropFirst("rating_".count)) : id
+               }) {
+                if !buddyFeedItems.isEmpty {
+                    deepLinkExpandCommentRatingId = ratingId
+                    deepLinkScrollToCommentId = commentId
+                } else {
+                    pendingCommentScrollData = (ratingId: ratingId, commentId: commentId)
                 }
             }
         case .reviewsList:
@@ -254,9 +270,12 @@ struct BuddyBoardView: View {
                         ForEach(buddyFeedItems) { item in
                             switch item {
                             case .rating(let rating):
-                                LibraryBuddyRatingRow(rating: rating)
-                                    .listRowInsets(EdgeInsets())
-                                    .id(item.id)
+                                LibraryBuddyRatingRow(
+                                    rating: rating,
+                                    autoExpandForCommentId: deepLinkExpandCommentRatingId == rating.id ? deepLinkScrollToCommentId : nil
+                                )
+                                .listRowInsets(EdgeInsets())
+                                .id(item.id)
                             case .recommendation(let rec, let receiverRating):
                                 RecommendationFeedRow(
                                     recommendation: rec,
@@ -278,6 +297,18 @@ struct BuddyBoardView: View {
                                     proxy.scrollTo(scrollId, anchor: .top)
                                 }
                                 deepLinkScrollToId = nil
+                            }
+                        }
+                    }
+                    .onChange(of: deepLinkScrollToCommentId) { commentId in
+                        if let commentId = commentId {
+                            // Delay to allow comment expansion and load to complete
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                withAnimation {
+                                    proxy.scrollTo(commentId, anchor: .center)
+                                }
+                                deepLinkScrollToCommentId = nil
+                                deepLinkExpandCommentRatingId = nil
                             }
                         }
                     }
@@ -335,6 +366,11 @@ struct BuddyBoardView: View {
         if let scrollId = pendingScrollId {
             pendingScrollId = nil
             deepLinkScrollToId = scrollId
+        }
+        if let commentData = pendingCommentScrollData {
+            pendingCommentScrollData = nil
+            deepLinkExpandCommentRatingId = commentData.ratingId
+            deepLinkScrollToCommentId = commentData.commentId
         }
     }
     
@@ -686,6 +722,7 @@ struct BuddyRatingsStatsCard: View {
 
 struct LibraryBuddyRatingRow: View {
     let rating: UserRating
+    var autoExpandForCommentId: String? = nil
     
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
@@ -708,8 +745,11 @@ struct LibraryBuddyRatingRow: View {
     @State private var showAllComments = false
     @State private var hasLoadedInteractions = false
     @State private var hasLoadedComments = false
+    @State private var replyingToComment: ReviewComment? = nil
+    @State private var mentionSuggestions: [AppUser] = []
+    @State private var showMentionSuggestions = false
+    @State private var mentionSearchTask: Task<Void, Never>? = nil
     
-    private let maxCommentLength = 100
     private let maxVisibleComments = 3
     
     private var percentageColor: Color {
@@ -957,6 +997,10 @@ struct LibraryBuddyRatingRow: View {
                 likesCount = rating.likesCount ?? 0
                 commentsCount = rating.commentsCount ?? 0
             }
+            if let _ = autoExpandForCommentId, !showComments {
+                showComments = true
+                showAllComments = true
+            }
         }
     }
     
@@ -1020,61 +1064,108 @@ struct LibraryBuddyRatingRow: View {
     private var commentsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             if showComments && authManager.currentUser != nil {
-                HStack(spacing: 8) {
-                    TextField("Add a comment...", text: $newCommentText)
-                        .textFieldStyle(PlainTextFieldStyle())
-                        .padding(10)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(20)
-                        .foregroundColor(.white)
-                        .focused($isCommentFieldFocused)
-                        .onChange(of: newCommentText) { newValue in
-                            if newValue.count > maxCommentLength {
-                                newCommentText = String(newValue.prefix(maxCommentLength))
+                VStack(alignment: .leading, spacing: 4) {
+                    // Reply context label
+                    if let replying = replyingToComment {
+                        HStack {
+                            Text("Replying to @\(replying.username ?? "user")")
+                                .font(.caption)
+                                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                            Spacer()
+                            Button(action: {
+                                replyingToComment = nil
+                                if newCommentText.hasPrefix("@") {
+                                    // Clear the prefilled @username if user cancels reply
+                                    let prefix = "@\(replying.username ?? "") "
+                                    if newCommentText.hasPrefix(prefix) {
+                                        newCommentText = ""
+                                    }
+                                }
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.4))
                             }
                         }
+                    }
                     
-                    Button(action: submitComment) {
-                        if isSubmittingComment {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .tint(.white)
-                        } else {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(newCommentText.isEmpty ? .white.opacity(0.3) : Color(red: 0.4, green: 0.2, blue: 0.6))
+                    HStack(spacing: 8) {
+                        TextField("Add a comment...", text: $newCommentText)
+                            .textFieldStyle(PlainTextFieldStyle())
+                            .padding(10)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(20)
+                            .foregroundColor(.white)
+                            .focused($isCommentFieldFocused)
+                            .onChange(of: newCommentText) { newValue in
+                                if newValue.count > 150 {
+                                    newCommentText = String(newValue.prefix(150))
+                                }
+                                handleMentionTyping(newValue)
+                            }
+                        
+                        Button(action: submitComment) {
+                            if isSubmittingComment {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(newCommentText.isEmpty ? .white.opacity(0.3) : Color(red: 0.4, green: 0.2, blue: 0.6))
+                            }
+                        }
+                        .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmittingComment)
+                    }
+                    
+                    if !newCommentText.isEmpty {
+                        Text("\(newCommentText.count)/150")
+                            .font(.caption2)
+                            .foregroundColor(newCommentText.count >= 140 ? .orange : .white.opacity(0.4))
+                    }
+                    
+                    // @mention suggestions
+                    if showMentionSuggestions && !mentionSuggestions.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(mentionSuggestions) { user in
+                                    Button(action: { insertMention(user) }) {
+                                        Text("@\(user.username ?? user.id)")
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 5)
+                                            .background(Color(red: 0.4, green: 0.2, blue: 0.6))
+                                            .cornerRadius(12)
+                                    }
+                                }
+                            }
                         }
                     }
-                    .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmittingComment)
-                }
-                
-                if !newCommentText.isEmpty {
-                    Text("\(newCommentText.count)/\(maxCommentLength)")
-                        .font(.caption2)
-                        .foregroundColor(newCommentText.count >= maxCommentLength ? .orange : .white.opacity(0.4))
                 }
             }
             
             if !comments.isEmpty {
                 let visibleComments = showAllComments ? sortedComments : Array(sortedComments.prefix(maxVisibleComments))
                 ForEach(visibleComments) { comment in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("@\(comment.username ?? "user") commented")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.5))
-                        
-                        CommentRow(
-                            comment: comment,
-                            reviewId: rating.id,
-                            initialLikesCount: commentLikeCounts[comment.id] ?? 0,
-                            onDelete: {
-                                await deleteComment(comment)
-                            },
-                            largerIcons: true
-                        )
-                        .environmentObject(authManager)
-                        .environmentObject(firebaseService)
-                    }
+                    CommentRow(
+                        comment: comment,
+                        reviewId: rating.id,
+                        initialLikesCount: commentLikeCounts[comment.id] ?? 0,
+                        onDelete: {
+                            await deleteComment(comment)
+                        },
+                        onReply: { replyComment in
+                            replyingToComment = replyComment
+                            let prefix = "@\(replyComment.username ?? "user") "
+                            newCommentText = prefix
+                            showComments = true
+                            isCommentFieldFocused = true
+                        },
+                        largerIcons: true
+                    )
+                    .environmentObject(authManager)
+                    .environmentObject(firebaseService)
                     .id(comment.id)
                 }
                 
@@ -1180,18 +1271,27 @@ struct LibraryBuddyRatingRow: View {
         let trimmedComment = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedComment.isEmpty else { return }
         
-        let finalComment = String(trimmedComment.prefix(maxCommentLength))
+        let finalComment = String(trimmedComment.prefix(150))
+        let replyId = replyingToComment?.id
+        let replyUsername = replyingToComment?.username
         
         isSubmittingComment = true
         
         Task {
             do {
-                let comment = try await firebaseService.addComment(to: rating.id, content: finalComment, user: user)
+                let comment = try await firebaseService.addComment(
+                    to: rating.id,
+                    content: finalComment,
+                    user: user,
+                    replyToCommentId: replyId,
+                    replyToUsername: replyUsername
+                )
                 await MainActor.run {
                     comments.append(comment)
                     commentLikeCounts[comment.id] = 0
                     commentsCount += 1
                     newCommentText = ""
+                    replyingToComment = nil
                     isCommentFieldFocused = false
                     showComments = false
                 }
@@ -1203,6 +1303,48 @@ struct LibraryBuddyRatingRow: View {
                 isSubmittingComment = false
             }
         }
+    }
+    
+    private func handleMentionTyping(_ text: String) {
+        // Find if there's an active @mention being typed at the end of the string
+        let words = text.components(separatedBy: .whitespaces)
+        guard let lastWord = words.last, lastWord.hasPrefix("@"), lastWord.count > 1 else {
+            showMentionSuggestions = false
+            mentionSuggestions = []
+            return
+        }
+        
+        let query = String(lastWord.dropFirst()) // Remove the @
+        mentionSearchTask?.cancel()
+        mentionSearchTask = Task {
+            do {
+                let users = try await firebaseService.searchUsers(query: query, limit: 5)
+                let filtered = users.filter { $0.id != authManager.currentUser?.id }
+                await MainActor.run {
+                    if !Task.isCancelled {
+                        mentionSuggestions = filtered
+                        showMentionSuggestions = !filtered.isEmpty
+                    }
+                }
+            } catch {
+                // Silently ignore search errors for autocomplete
+            }
+        }
+    }
+    
+    private func insertMention(_ user: AppUser) {
+        guard let username = user.username else { return }
+        // Replace the last partial @mention with the full @username
+        var words = newCommentText.components(separatedBy: " ")
+        if words.last?.hasPrefix("@") == true {
+            words[words.count - 1] = "@\(username)"
+        } else {
+            words.append("@\(username)")
+        }
+        newCommentText = words.joined(separator: " ") + " "
+        showMentionSuggestions = false
+        mentionSuggestions = []
+        isCommentFieldFocused = true
     }
     
     private func deleteComment(_ comment: ReviewComment) async {

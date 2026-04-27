@@ -14,6 +14,7 @@ struct ReviewsListView: View {
     let imageURL: URL?
     let reviewType: Review.ReviewType
     var scrollToReviewId: String? = nil
+    var scrollToCommentId: String? = nil
     
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
@@ -70,6 +71,7 @@ struct ReviewsListView: View {
                                         initialLikesCount: reviewLikeCounts[review.id] ?? 0,
                                         buddyIds: buddyIds,
                                         autoExpandComments: review.id == scrollToReviewId,
+                                        scrollToCommentId: review.id == scrollToReviewId ? scrollToCommentId : nil,
                                         onDelete: {
                                             await deleteReview(review)
                                         }
@@ -90,7 +92,17 @@ struct ReviewsListView: View {
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                     withAnimation {
-                                        proxy.scrollTo(targetId, anchor: .top)
+                                        // If we have a specific comment to scroll to, scroll there after a longer delay
+                                        if let commentId = scrollToCommentId {
+                                            proxy.scrollTo(targetId, anchor: .top)
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                                withAnimation {
+                                                    proxy.scrollTo(commentId, anchor: .center)
+                                                }
+                                            }
+                                        } else {
+                                            proxy.scrollTo(targetId, anchor: .top)
+                                        }
                                     }
                                     didScrollToTarget = true
                                 }
@@ -193,6 +205,7 @@ struct ReviewCard: View {
     let initialLikesCount: Int
     let buddyIds: Set<String>
     var autoExpandComments: Bool = false
+    var scrollToCommentId: String? = nil
     var onDelete: (() async -> Void)? = nil
     
     @EnvironmentObject var authManager: AuthenticationManager
@@ -212,8 +225,11 @@ struct ReviewCard: View {
     @State private var hasLoadedInteractions = false
     @State private var hasLoadedComments = false
     @State private var showDeleteConfirmation = false
+    @State private var replyingToComment: ReviewComment? = nil
+    @State private var mentionSuggestions: [AppUser] = []
+    @State private var showMentionSuggestions = false
+    @State private var mentionSearchTask: Task<Void, Never>? = nil
     
-    private let maxCommentLength = 100
     private let maxVisibleComments = 3
     
     private var isOwnReview: Bool {
@@ -359,6 +375,10 @@ struct ReviewCard: View {
             if autoExpandComments && !showComments {
                 showComments = true
             }
+            if scrollToCommentId != nil && !showComments {
+                showComments = true
+                showAllComments = true
+            }
         }
     }
     
@@ -390,37 +410,80 @@ struct ReviewCard: View {
                 .background(Color.white.opacity(0.1))
             
             if authManager.currentUser != nil {
-                HStack(spacing: 8) {
-                    TextField("Add a comment...", text: $newCommentText)
-                        .textFieldStyle(PlainTextFieldStyle())
-                        .padding(10)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(20)
-                        .foregroundColor(.white)
-                        .onChange(of: newCommentText) { newValue in
-                            if newValue.count > maxCommentLength {
-                                newCommentText = String(newValue.prefix(maxCommentLength))
+                VStack(alignment: .leading, spacing: 4) {
+                    // Reply context label
+                    if let replying = replyingToComment {
+                        HStack {
+                            Text("Replying to @\(replying.username ?? "user")")
+                                .font(.caption)
+                                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                            Spacer()
+                            Button(action: {
+                                replyingToComment = nil
+                                let prefix = "@\(replying.username ?? "") "
+                                if newCommentText.hasPrefix(prefix) {
+                                    newCommentText = ""
+                                }
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.4))
                             }
                         }
+                    }
                     
-                    Button(action: submitComment) {
-                        if isSubmittingComment {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .tint(.white)
-                        } else {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(newCommentText.isEmpty ? .white.opacity(0.3) : Color(red: 0.4, green: 0.2, blue: 0.6))
+                    HStack(spacing: 8) {
+                        TextField("Add a comment...", text: $newCommentText)
+                            .textFieldStyle(PlainTextFieldStyle())
+                            .padding(10)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(20)
+                            .foregroundColor(.white)
+                            .onChange(of: newCommentText) { newValue in
+                                if newValue.count > 150 {
+                                    newCommentText = String(newValue.prefix(150))
+                                }
+                                handleMentionTyping(newValue)
+                            }
+                        
+                        Button(action: submitComment) {
+                            if isSubmittingComment {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(newCommentText.isEmpty ? .white.opacity(0.3) : Color(red: 0.4, green: 0.2, blue: 0.6))
+                            }
+                        }
+                        .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmittingComment)
+                    }
+                    
+                    if !newCommentText.isEmpty {
+                        Text("\(newCommentText.count)/150")
+                            .font(.caption2)
+                            .foregroundColor(newCommentText.count >= 140 ? .orange : .white.opacity(0.4))
+                    }
+                    
+                    // @mention suggestions
+                    if showMentionSuggestions && !mentionSuggestions.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(mentionSuggestions) { user in
+                                    Button(action: { insertMention(user) }) {
+                                        Text("@\(user.username ?? user.id)")
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 5)
+                                            .background(Color(red: 0.4, green: 0.2, blue: 0.6))
+                                            .cornerRadius(12)
+                                    }
+                                }
+                            }
                         }
                     }
-                    .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmittingComment)
-                }
-                
-                if !newCommentText.isEmpty {
-                    Text("\(newCommentText.count)/\(maxCommentLength)")
-                        .font(.caption2)
-                        .foregroundColor(newCommentText.count >= maxCommentLength ? .orange : .white.opacity(0.4))
                 }
             }
             
@@ -451,10 +514,16 @@ struct ReviewCard: View {
                             initialLikesCount: commentLikeCounts[comment.id] ?? 0,
                             onDelete: {
                                 await deleteComment(comment)
+                            },
+                            onReply: { replyComment in
+                                replyingToComment = replyComment
+                                newCommentText = "@\(replyComment.username ?? "user") "
+                                showComments = true
                             }
                         )
                         .environmentObject(authManager)
                         .environmentObject(firebaseService)
+                        .id(comment.id)
                     }
                     
                     if buddyCommentsList.count > maxVisibleComments && !showAllComments {
@@ -476,10 +545,16 @@ struct ReviewCard: View {
                             initialLikesCount: commentLikeCounts[comment.id] ?? 0,
                             onDelete: {
                                 await deleteComment(comment)
+                            },
+                            onReply: { replyComment in
+                                replyingToComment = replyComment
+                                newCommentText = "@\(replyComment.username ?? "user") "
+                                showComments = true
                             }
                         )
                         .environmentObject(authManager)
                         .environmentObject(firebaseService)
+                        .id(comment.id)
                     }
                     
                     if otherCommentsList.count > maxVisibleComments && !showAllComments {
@@ -491,7 +566,6 @@ struct ReviewCard: View {
                         .padding(.top, 4)
                     }
                 } else if !showComments && !otherCommentsList.isEmpty {
-                    // Show a hint that there are more non-buddy comments
                     Button(action: {
                         withAnimation { showComments = true }
                     }) {
@@ -601,18 +675,27 @@ struct ReviewCard: View {
         let trimmedComment = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedComment.isEmpty else { return }
         
-        let finalComment = String(trimmedComment.prefix(maxCommentLength))
+        let finalComment = String(trimmedComment.prefix(150))
+        let replyId = replyingToComment?.id
+        let replyUsername = replyingToComment?.username
         
         isSubmittingComment = true
         
         Task {
             do {
-                let comment = try await firebaseService.addComment(to: review.id, content: finalComment, user: user)
+                let comment = try await firebaseService.addComment(
+                    to: review.id,
+                    content: finalComment,
+                    user: user,
+                    replyToCommentId: replyId,
+                    replyToUsername: replyUsername
+                )
                 await MainActor.run {
                     comments.append(comment)
                     commentLikeCounts[comment.id] = 0
                     commentsCount += 1
                     newCommentText = ""
+                    replyingToComment = nil
                 }
             } catch {
                 print("Error submitting comment: \(error)")
@@ -622,6 +705,42 @@ struct ReviewCard: View {
                 isSubmittingComment = false
             }
         }
+    }
+    
+    private func handleMentionTyping(_ text: String) {
+        let words = text.components(separatedBy: .whitespaces)
+        guard let lastWord = words.last, lastWord.hasPrefix("@"), lastWord.count > 1 else {
+            showMentionSuggestions = false
+            mentionSuggestions = []
+            return
+        }
+        let query = String(lastWord.dropFirst())
+        mentionSearchTask?.cancel()
+        mentionSearchTask = Task {
+            do {
+                let users = try await firebaseService.searchUsers(query: query, limit: 5)
+                let filtered = users.filter { $0.id != authManager.currentUser?.id }
+                await MainActor.run {
+                    if !Task.isCancelled {
+                        mentionSuggestions = filtered
+                        showMentionSuggestions = !filtered.isEmpty
+                    }
+                }
+            } catch { }
+        }
+    }
+    
+    private func insertMention(_ user: AppUser) {
+        guard let username = user.username else { return }
+        var words = newCommentText.components(separatedBy: " ")
+        if words.last?.hasPrefix("@") == true {
+            words[words.count - 1] = "@\(username)"
+        } else {
+            words.append("@\(username)")
+        }
+        newCommentText = words.joined(separator: " ") + " "
+        showMentionSuggestions = false
+        mentionSuggestions = []
     }
     
     private func deleteComment(_ comment: ReviewComment) async {
@@ -643,6 +762,7 @@ struct CommentRow: View {
     let reviewId: String
     let initialLikesCount: Int
     let onDelete: () async -> Void
+    var onReply: ((ReviewComment) -> Void)? = nil
     var largerIcons: Bool = false
     
     @EnvironmentObject var authManager: AuthenticationManager
@@ -690,6 +810,16 @@ struct CommentRow: View {
                             .foregroundColor(.white.opacity(0.5))
                     }
                     
+                    // Show reply indicator
+                    if let replyUsername = comment.replyToUsername {
+                        Image(systemName: "arrowshape.turn.up.left.fill")
+                            .font(.system(size: 9))
+                            .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                        Text("@\(replyUsername)")
+                            .font(.caption)
+                            .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                    }
+                    
                     Text("•")
                         .font(.caption2)
                         .foregroundColor(.white.opacity(0.4))
@@ -715,6 +845,16 @@ struct CommentRow: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(isTogglingLike || authManager.currentUser == nil)
+                    
+                    // Reply button
+                    if authManager.currentUser != nil, let onReply = onReply {
+                        Button(action: { onReply(comment) }) {
+                            Image(systemName: "arrowshape.turn.up.left")
+                                .font(.system(size: largerIcons ? 15 : 12))
+                                .foregroundColor(.white.opacity(0.4))
+                        }
+                        .buttonStyle(.plain)
+                    }
                     
                     if isOwnComment {
                         Button(action: { showDeleteConfirmation = true }) {

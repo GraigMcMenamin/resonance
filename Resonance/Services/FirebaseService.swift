@@ -1089,9 +1089,9 @@ class FirebaseService: ObservableObject {
     
     // MARK: - Review Comment Operations (stored under ratings collection)
     
-    func addComment(to reviewId: String, content: String, user: AppUser) async throws -> ReviewComment {
+    func addComment(to reviewId: String, content: String, user: AppUser, replyToCommentId: String? = nil, replyToUsername: String? = nil) async throws -> ReviewComment {
         let commentId = UUID().uuidString
-        let comment = ReviewComment(
+        var comment = ReviewComment(
             id: commentId,
             reviewId: reviewId,
             userId: user.id,
@@ -1100,6 +1100,8 @@ class FirebaseService: ObservableObject {
             content: content,
             createdAt: Date()
         )
+        comment.replyToCommentId = replyToCommentId
+        comment.replyToUsername = replyToUsername
         
         try db.collection("ratings")
             .document(reviewId)
@@ -1108,6 +1110,15 @@ class FirebaseService: ObservableObject {
             .setData(from: comment)
         
         return comment
+    }
+    
+    func getUserByUsername(_ username: String) async throws -> AppUser? {
+        let lowercase = username.lowercased()
+        let snapshot = try await db.collection("users")
+            .whereField("usernameLowercase", isEqualTo: lowercase)
+            .limit(to: 1)
+            .getDocuments()
+        return snapshot.documents.first.flatMap { try? $0.data(as: AppUser.self) }
     }
     
     func deleteComment(reviewId: String, commentId: String) async throws {

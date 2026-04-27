@@ -619,7 +619,11 @@ exports.onReviewLikeDeleted = onDocumentDeleted(
  * Cloud Function: Maintain comment count on ratings/reviews
  * 
  * Triggered when a comment is added to a rating's comments subcollection.
- * Increments the commentsCount field on the parent rating document.
+ * Handles:
+ *  1. Incrementing the commentsCount on the parent rating.
+ *  2. Notifying the rating owner (unless they are the commenter).
+ *  3. Notifying the original commenter when a reply is posted.
+ *  4. Notifying users @mentioned in the comment text.
  */
 exports.onReviewCommentCreated = onDocumentCreated(
   "ratings/{ratingId}/comments/{commentId}",
@@ -631,7 +635,6 @@ exports.onReviewCommentCreated = onDocumentCreated(
       });
       console.log(`Incremented commentsCount for rating ${event.params.ratingId}`);
 
-      // Send push notification to the rating owner
       const commentData = event.data.data();
       const ratingDoc = await ratingRef.get();
       if (!ratingDoc.exists) return;
@@ -639,73 +642,141 @@ exports.onReviewCommentCreated = onDocumentCreated(
       const ratingData = ratingDoc.data();
       const ratingOwnerId = ratingData.userId;
       const commenterId = commentData.userId;
-
-      // Don't notify if the user commented on their own rating
-      if (ratingOwnerId === commenterId) {
-        console.log("User commented on their own rating, skipping notification");
-        return;
-      }
-
-      const ownerDoc = await admin.firestore().collection("users").doc(ratingOwnerId).get();
-      if (!ownerDoc.exists) return;
-
-      const ownerData = ownerDoc.data();
-      const fcmTokens = ownerData.fcmTokens || [];
-      if (fcmTokens.length === 0) {
-        console.log(`No FCM tokens for rating owner ${ratingOwnerId}`);
-        return;
-      }
-
       const commenterName = commentData.username || "Someone";
       const itemName = ratingData.name || "your rating";
-      const hasReview = ratingData.reviewContent && ratingData.reviewContent.trim() !== "";
+      const hasReview = !!(ratingData.reviewContent && ratingData.reviewContent.trim() !== "");
       const itemLabel = hasReview ? "review" : "rating";
       const commentPreview = commentData.content && commentData.content.length > 50
         ? commentData.content.substring(0, 50) + "..."
         : commentData.content || "";
-      const notificationBody = `${commenterName} commented on your ${itemLabel} of ${itemName}: "${commentPreview}"`;
 
-      const notifications = fcmTokens.map(async (token) => {
-        try {
-          await admin.messaging().send({
-            token: token,
-            notification: {
-              title: "New Comment",
-              body: notificationBody,
-            },
-            data: {
-              type: "comment",
-              ratingId: event.params.ratingId,
-              commentId: event.params.commentId,
-              spotifyId: ratingData.spotifyId || "",
-              itemType: ratingData.type || "",
-              itemName: ratingData.name || "",
-              artistName: ratingData.artistName || "",
-              imageURL: ratingData.imageURL || "",
-              hasReviewContent: hasReview ? "true" : "false",
-              commenterId: commenterId,
-            },
-            apns: {
-              payload: {
-                aps: {
-                  sound: "default",
-                },
-              },
-            },
-          });
-          console.log(`Comment notification sent to token: ${token.substring(0, 20)}...`);
-        } catch (error) {
-          console.error(`Error sending comment notification: ${error.message}`);
-          if (error.code === "messaging/invalid-registration-token" ||
-              error.code === "messaging/registration-token-not-registered") {
-            await admin.firestore().collection("users").doc(ratingOwnerId).update({
-              fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
+      // Helper: send a push notification to a user
+      async function sendNotificationToUser(userId, notification, data) {
+        if (userId === commenterId) return; // Never notify self
+        const userDoc = await admin.firestore().collection("users").doc(userId).get();
+        if (!userDoc.exists) return;
+        const userData = userDoc.data();
+        const fcmTokens = userData.fcmTokens || [];
+        if (fcmTokens.length === 0) return;
+
+        await Promise.all(fcmTokens.map(async (token) => {
+          try {
+            await admin.messaging().send({
+              token,
+              notification,
+              data,
+              apns: { payload: { aps: { sound: "default" } } },
             });
+          } catch (error) {
+            console.error(`Failed to send notification to token: ${error.message}`);
+            if (
+              error.code === "messaging/invalid-registration-token" ||
+              error.code === "messaging/registration-token-not-registered"
+            ) {
+              await admin.firestore().collection("users").doc(userId).update({
+                fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
+              });
+            }
           }
+        }));
+      }
+
+      const baseData = {
+        ratingId: event.params.ratingId,
+        commentId: event.params.commentId,
+        spotifyId: ratingData.spotifyId || "",
+        itemType: ratingData.type || "",
+        itemName: ratingData.name || "",
+        artistName: ratingData.artistName || "",
+        imageURL: ratingData.imageURL || "",
+        hasReviewContent: hasReview ? "true" : "false",
+        commenterId: commenterId,
+      };
+
+      // Track notified users to avoid duplicate notifications
+      const notifiedUsers = new Set();
+
+      // 1. Notify rating owner (unless they are the commenter)
+      if (ratingOwnerId !== commenterId) {
+        await sendNotificationToUser(
+          ratingOwnerId,
+          {
+            title: "New Comment",
+            body: `${commenterName} commented on your ${itemLabel} of ${itemName}: "${commentPreview}"`,
+          },
+          { type: "comment", ...baseData }
+        );
+        notifiedUsers.add(ratingOwnerId);
+        console.log(`Comment notification sent to rating owner ${ratingOwnerId}`);
+      }
+
+      // 2. Notify the original commenter if this is a reply
+      const replyToCommentId = commentData.replyToCommentId;
+      if (replyToCommentId) {
+        try {
+          const originalCommentDoc = await ratingRef
+            .collection("comments")
+            .doc(replyToCommentId)
+            .get();
+          if (originalCommentDoc.exists) {
+            const originalCommentData = originalCommentDoc.data();
+            const originalCommenterId = originalCommentData.userId;
+            if (!notifiedUsers.has(originalCommenterId)) {
+              await sendNotificationToUser(
+                originalCommenterId,
+                {
+                  title: "New Reply",
+                  body: `${commenterName} replied to your comment: "${commentPreview}"`,
+                },
+                { type: "reply", ...baseData }
+              );
+              notifiedUsers.add(originalCommenterId);
+              console.log(`Reply notification sent to original commenter ${originalCommenterId}`);
+            }
+          }
+        } catch (err) {
+          console.error("Error sending reply notification:", err);
         }
-      });
-      await Promise.all(notifications);
-      console.log(`Comment notification sent to rating owner ${ratingOwnerId}`);
+      }
+
+      // 3. Notify @mentioned users
+      const content = commentData.content || "";
+      const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+      const mentionedUsernames = [];
+      let match;
+      while ((match = mentionRegex.exec(content)) !== null) {
+        const username = match[1].toLowerCase();
+        if (!mentionedUsernames.includes(username)) {
+          mentionedUsernames.push(username);
+        }
+      }
+
+      for (const username of mentionedUsernames) {
+        try {
+          const userQuery = await admin.firestore()
+            .collection("users")
+            .where("usernameLowercase", "==", username)
+            .limit(1)
+            .get();
+          if (!userQuery.empty) {
+            const mentionedUserId = userQuery.docs[0].id;
+            if (!notifiedUsers.has(mentionedUserId)) {
+              await sendNotificationToUser(
+                mentionedUserId,
+                {
+                  title: "You were mentioned",
+                  body: `${commenterName} mentioned you in a comment on ${itemLabel} of ${itemName}: "${commentPreview}"`,
+                },
+                { type: "mention", ...baseData }
+              );
+              notifiedUsers.add(mentionedUserId);
+              console.log(`Mention notification sent to @${username} (${mentionedUserId})`);
+            }
+          }
+        } catch (err) {
+          console.error(`Error sending mention notification for @${username}:`, err);
+        }
+      }
     } catch (error) {
       console.error("Error in onReviewCommentCreated:", error);
     }
@@ -954,5 +1025,136 @@ exports.refreshSpotifyToken = onRequest(
       console.error("refreshSpotifyToken error:", error);
       return res.status(500).json({error: "Internal server error"});
     }
+  }
+);
+/**
+ * Cloud Function: Change a user's username and backfill all associated documents.
+ *
+ * POST /changeUsername
+ * Headers: Authorization: Bearer <Firebase ID token>
+ * Body: { newUsername: string }
+ * Response: { success: true }
+ */
+exports.changeUsername = onRequest(
+  {
+    cors: true,
+    maxInstances: 10,
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      return res.status(405).json({error: "Method not allowed"});
+    }
+
+    // Verify Firebase ID token
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({error: "Missing or invalid Authorization header"});
+    }
+
+    const idToken = authHeader.slice(7);
+    let decodedToken;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+    } catch (err) {
+      console.error("ID token verification failed:", err);
+      return res.status(401).json({error: "Invalid ID token"});
+    }
+
+    const userId = decodedToken.uid;
+    const {newUsername} = req.body;
+
+    // Basic validation
+    if (!newUsername || typeof newUsername !== "string") {
+      return res.status(400).json({error: "newUsername is required"});
+    }
+
+    const trimmed = newUsername.trim();
+    if (trimmed.length < 3 || trimmed.length > 30) {
+      return res.status(400).json({error: "Username must be 3–30 characters"});
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
+      return res.status(400).json({error: "Username may only contain letters, numbers, and underscores"});
+    }
+
+    const db = admin.firestore();
+    const lowercaseUsername = trimmed.toLowerCase();
+
+    // Check availability (exclude current user's own username)
+    const existing = await db.collection("users")
+      .where("usernameLowercase", "==", lowercaseUsername)
+      .limit(1)
+      .get();
+
+    if (!existing.empty && existing.docs[0].id !== userId) {
+      return res.status(409).json({error: "Username is already taken"});
+    }
+
+    // Update user document
+    await db.collection("users").doc(userId).update({
+      username: trimmed,
+      usernameLowercase: lowercaseUsername,
+    });
+
+    console.log(`[changeUsername] Updated user doc for ${userId} → @${trimmed}`);
+
+    // ---------------------------------------------------------------------------
+    // Backfill denormalized username field in all associated documents
+    // ---------------------------------------------------------------------------
+    const BATCH_SIZE = 499; // Firestore batch limit is 500 writes
+
+    async function batchUpdateField(query, updatePayload) {
+      let updated = 0;
+      let lastDoc = null;
+
+      do {
+        let q = query.limit(BATCH_SIZE);
+        if (lastDoc) q = q.startAfter(lastDoc);
+
+        const snapshot = await q.get();
+        if (snapshot.empty) break;
+
+        const batch = db.batch();
+        snapshot.docs.forEach((doc) => {
+          batch.update(doc.ref, updatePayload);
+        });
+        await batch.commit();
+
+        updated += snapshot.docs.length;
+        lastDoc = snapshot.docs[snapshot.docs.length - 1];
+      } while (lastDoc);
+
+      return updated;
+    }
+
+    // 1. ratings collection
+    const ratingsUpdated = await batchUpdateField(
+      db.collection("ratings").where("userId", "==", userId),
+      {username: trimmed}
+    );
+    console.log(`[changeUsername] Updated ${ratingsUpdated} rating(s)`);
+
+    // 2. legacy reviews collection
+    const reviewsUpdated = await batchUpdateField(
+      db.collection("reviews").where("userId", "==", userId),
+      {username: trimmed}
+    );
+    console.log(`[changeUsername] Updated ${reviewsUpdated} review(s)`);
+
+    // 3. comments (subcollection of ratings) — fetched via collectionGroup
+    const commentsUpdated = await batchUpdateField(
+      db.collectionGroup("comments").where("userId", "==", userId),
+      {username: trimmed}
+    );
+    console.log(`[changeUsername] Updated ${commentsUpdated} comment(s)`);
+
+    // 4. likes — stored with the liker's username
+    const likesUpdated = await batchUpdateField(
+      db.collectionGroup("likes").where("userId", "==", userId),
+      {username: trimmed}
+    );
+    console.log(`[changeUsername] Updated ${likesUpdated} like(s)`);
+
+    console.log(`[changeUsername] Complete for ${userId} → @${trimmed}`);
+    return res.status(200).json({success: true});
   }
 );
