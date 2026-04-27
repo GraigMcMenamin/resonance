@@ -947,7 +947,7 @@ struct ProfileView: View {
                 .font(.system(size: 40))
                 .foregroundColor(.white.opacity(0.3))
             
-            Text("Tap the edit button to add your top \(type.displayName.lowercased())s")
+            Text("Tap the edit button to add your top \(type.displayName.lowercased())")
                 .font(.subheadline)
                 .foregroundColor(.white.opacity(0.5))
                 .multilineTextAlignment(.center)

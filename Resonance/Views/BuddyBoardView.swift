@@ -93,7 +93,7 @@ struct BuddyBoardView: View {
     
     @ViewBuilder
     private var deepLinkReviewsView: some View {
-        if case .reviewsList(let spotifyId, let itemName, let artistName, let imageURL, let itemType, let scrollToReviewId, let scrollToCommentId) = deepLinkReviewsDestination {
+        if case .reviewsList(let spotifyId, let itemName, let artistName, let imageURL, let itemType, let scrollToReviewId, let scrollToCommentId, let reviewLength) = deepLinkReviewsDestination {
             let reviewType: Review.ReviewType = {
                 switch itemType {
                 case "artist": return .artist
@@ -101,6 +101,7 @@ struct BuddyBoardView: View {
                 default: return .track
                 }
             }()
+            let initialLength: Review.ReviewLength = reviewLength == "long" ? .long : .short
             ReviewsListView(
                 spotifyId: spotifyId,
                 itemName: itemName,
@@ -108,7 +109,8 @@ struct BuddyBoardView: View {
                 imageURL: imageURL.flatMap { URL(string: $0) },
                 reviewType: reviewType,
                 scrollToReviewId: scrollToReviewId,
-                scrollToCommentId: scrollToCommentId
+                scrollToCommentId: scrollToCommentId,
+                initialSelectedLength: initialLength
             )
         } else {
             EmptyView()
@@ -1100,13 +1102,6 @@ struct LibraryBuddyRatingRow: View {
                             Spacer()
                             Button(action: {
                                 replyingToComment = nil
-                                if newCommentText.hasPrefix("@") {
-                                    // Clear the prefilled @username if user cancels reply
-                                    let prefix = "@\(replying.username ?? "") "
-                                    if newCommentText.hasPrefix(prefix) {
-                                        newCommentText = ""
-                                    }
-                                }
                             }) {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.caption)
@@ -1183,8 +1178,6 @@ struct LibraryBuddyRatingRow: View {
                         },
                         onReply: { replyComment in
                             replyingToComment = replyComment
-                            let prefix = "@\(replyComment.username ?? "user") "
-                            newCommentText = prefix
                             showComments = true
                             isCommentFieldFocused = true
                         },

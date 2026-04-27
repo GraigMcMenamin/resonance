@@ -681,6 +681,9 @@ exports.onReviewCommentCreated = onDocumentCreated(
         }));
       }
 
+      const reviewContentLength = (ratingData.reviewContent || "").length;
+      const reviewLength = reviewContentLength >= 150 ? "long" : "short";
+
       const baseData = {
         ratingId: event.params.ratingId,
         commentId: event.params.commentId,
@@ -690,6 +693,7 @@ exports.onReviewCommentCreated = onDocumentCreated(
         artistName: ratingData.artistName || "",
         imageURL: ratingData.imageURL || "",
         hasReviewContent: hasReview ? "true" : "false",
+        reviewLength: hasReview ? reviewLength : "short",
         commenterId: commenterId,
       };
 

@@ -433,10 +433,6 @@ struct ReviewCard: View {
                             Spacer()
                             Button(action: {
                                 replyingToComment = nil
-                                let prefix = "@\(replying.username ?? "") "
-                                if newCommentText.hasPrefix(prefix) {
-                                    newCommentText = ""
-                                }
                             }) {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.caption)
@@ -530,7 +526,6 @@ struct ReviewCard: View {
                             },
                             onReply: { replyComment in
                                 replyingToComment = replyComment
-                                newCommentText = "@\(replyComment.username ?? "user") "
                                 showComments = true
                             }
                         )
@@ -561,7 +556,6 @@ struct ReviewCard: View {
                             },
                             onReply: { replyComment in
                                 replyingToComment = replyComment
-                                newCommentText = "@\(replyComment.username ?? "user") "
                                 showComments = true
                             }
                         )
@@ -785,6 +779,8 @@ struct CommentRow: View {
     @State private var isLiked = false
     @State private var likesCount = 0
     @State private var isTogglingLike = false
+    @State private var mentionUserId: String? = nil
+    @State private var isMentionNavActive = false
     
     var isOwnComment: Bool {
         authManager.currentUser?.id == comment.userId
@@ -879,13 +875,29 @@ struct CommentRow: View {
                     }
                 }
                 
-                Text(comment.content)
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.85))
-                    .fixedSize(horizontal: false, vertical: true)
+                MentionText(content: comment.content) { username in
+                    Task {
+                        if let user = try? await firebaseService.getUserByUsername(username) {
+                            await MainActor.run {
+                                mentionUserId = user.id
+                                isMentionNavActive = true
+                            }
+                        }
+                    }
+                }
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.vertical, 6)
+        .background(
+            NavigationLink(
+                destination: BuddyProfileDestination(userId: mentionUserId ?? ""),
+                isActive: $isMentionNavActive
+            ) { EmptyView() }
+            .hidden()
+        )
         .confirmationDialog("Delete Comment", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 Task {

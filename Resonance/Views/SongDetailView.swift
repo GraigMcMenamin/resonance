@@ -213,7 +213,8 @@ struct SongDetailView: View {
                     }
                 }) {
                     Text(hasUserRating ? "edit review" : "review")
-                    .font(.subheadline)
+                    .font(.footnote)
+                    .lineLimit(1)
                     .foregroundColor(.white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
@@ -232,8 +233,9 @@ struct SongDetailView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "text.bubble")
                         Text("reviews")
+                            .lineLimit(1)
                     }
-                    .font(.subheadline)
+                    .font(.footnote)
                     .foregroundColor(.white.opacity(0.8))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
@@ -251,8 +253,9 @@ struct SongDetailView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "paperplane")
                             Text("send")
+                                .lineLimit(1)
                         }
-                        .font(.subheadline)
+                        .font(.footnote)
                         .foregroundColor(.white.opacity(0.8))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)

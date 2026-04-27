@@ -27,6 +27,11 @@ struct RatingSheet: View {
     @State private var isSaving = false
     @State private var showingDeleteConfirmation = false
     @State private var errorMessage: String?
+
+    // @mention states
+    @State private var mentionSuggestions: [AppUser] = []
+    @State private var showMentionSuggestions = false
+    @State private var mentionSearchTask: Task<Void, Never>? = nil
     
     private let shortCharacterLimit = 149
     private let minLongCharacters = 150
@@ -264,6 +269,7 @@ struct RatingSheet: View {
                         if selectedLength == .short && newValue.count > shortCharacterLimit {
                             reviewContent = String(newValue.prefix(shortCharacterLimit))
                         }
+                        handleMentionTyping(newValue)
                     }
             }
             .frame(height: selectedLength == .short ? 100 : 150)
@@ -276,6 +282,26 @@ struct RatingSheet: View {
                     .stroke(reviewBorderColor, lineWidth: 1)
             )
             .padding(.horizontal)
+
+            // @mention suggestions
+            if showMentionSuggestions && !mentionSuggestions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(mentionSuggestions) { user in
+                            Button(action: { insertMention(user) }) {
+                                Text("@\(user.username ?? user.id)")
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Color(red: 0.4, green: 0.2, blue: 0.6))
+                                    .cornerRadius(12)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
         }
     }
     
@@ -460,8 +486,48 @@ struct RatingSheet: View {
         }
     }
     
+    // MARK: - Mention Helpers
+
+    private func handleMentionTyping(_ text: String) {
+        let words = text.components(separatedBy: .whitespaces)
+        guard let lastWord = words.last, lastWord.hasPrefix("@"), lastWord.count > 1 else {
+            showMentionSuggestions = false
+            mentionSuggestions = []
+            return
+        }
+        let query = String(lastWord.dropFirst())
+        mentionSearchTask?.cancel()
+        mentionSearchTask = Task {
+            do {
+                let users = try await firebaseService.searchUsers(query: query, limit: 5)
+                let filtered = users.filter { $0.id != authManager.currentUser?.id }
+                await MainActor.run {
+                    if !Task.isCancelled {
+                        mentionSuggestions = filtered
+                        showMentionSuggestions = !filtered.isEmpty
+                    }
+                }
+            } catch {
+                // Silently ignore autocomplete search errors
+            }
+        }
+    }
+
+    private func insertMention(_ user: AppUser) {
+        guard let username = user.username else { return }
+        var words = reviewContent.components(separatedBy: " ")
+        if words.last?.hasPrefix("@") == true {
+            words[words.count - 1] = "@\(username)"
+        } else {
+            words.append("@\(username)")
+        }
+        reviewContent = words.joined(separator: " ") + " "
+        showMentionSuggestions = false
+        mentionSuggestions = []
+    }
+
     // MARK: - Actions
-    
+
     private func loadExistingRating() {
         guard let userId = authManager.currentUser?.id else { return }
         let ratingId = UserRating.makeId(userId: userId, spotifyId: item.id)

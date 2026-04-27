@@ -17,7 +17,7 @@ enum NotificationDeepLink: Equatable {
     /// Navigate to buddy ratings tab, optionally scroll to a specific feed item and/or comment
     case buddyRatingFeed(scrollToId: String?, scrollToCommentId: String?)
     /// Navigate to ReviewsListView for a specific item, optionally scrolling to a review and/or comment
-    case reviewsList(spotifyId: String, itemName: String, artistName: String?, imageURL: String?, itemType: String, scrollToReviewId: String?, scrollToCommentId: String?)
+    case reviewsList(spotifyId: String, itemName: String, artistName: String?, imageURL: String?, itemType: String, scrollToReviewId: String?, scrollToCommentId: String?, reviewLength: String)
     /// Navigate to home page (for recommendation notifications)
     case homePage
     /// Navigate to profile page (for buddy request notifications)
@@ -246,6 +246,7 @@ class NotificationManager: NSObject, ObservableObject {
         let imageURL = userInfo["imageURL"] as? String
         let itemType = userInfo["itemType"] as? String ?? "track"
         let ratingId = userInfo["ratingId"] as? String
+        let reviewLength = userInfo["reviewLength"] as? String ?? "short"
         
         pendingDeepLink = .reviewsList(
             spotifyId: spotifyId,
@@ -254,7 +255,8 @@ class NotificationManager: NSObject, ObservableObject {
             imageURL: imageURL,
             itemType: itemType,
             scrollToReviewId: ratingId,
-            scrollToCommentId: scrollToCommentId
+            scrollToCommentId: scrollToCommentId,
+            reviewLength: reviewLength
         )
     }
     
