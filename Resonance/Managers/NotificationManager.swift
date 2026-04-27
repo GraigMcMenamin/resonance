@@ -87,7 +87,16 @@ class NotificationManager: NSObject, ObservableObject {
     // MARK: - FCM Token Management
     
     func setUserId(_ userId: String?) {
+        let previousUserId = self.currentUserId
         self.currentUserId = userId
+        
+        // Remove the token from the old user when logging out or switching accounts
+        if let previousUserId = previousUserId, previousUserId != userId, let token = fcmToken {
+            Task {
+                try? await firebaseService?.removeFCMToken(userId: previousUserId, token: token)
+                print("FCM token removed from previous user \(previousUserId)")
+            }
+        }
         
         if let userId = userId, let token = fcmToken {
             // Save existing token to Firestore for current user
