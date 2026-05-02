@@ -179,6 +179,9 @@ struct AuthenticatedView: View {
         case .profilePage:
             selectedTab = 3
             notificationManager.pendingDeepLink = nil
+        case .myRatings:
+            // Switch to BuddyBoard tab; BuddyBoardView handles the section switch
+            selectedTab = 0
         }
     }
 }

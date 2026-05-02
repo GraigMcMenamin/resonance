@@ -15,6 +15,7 @@ struct ProfileView: View {
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var buddyManager: BuddyManager
     @EnvironmentObject var spotifyService: SpotifyService
+    @EnvironmentObject var notificationManager: NotificationManager
     @StateObject private var viewModel = ProfileViewModel()
     @State private var selectedPickerType: TopItemType?
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -68,7 +69,38 @@ struct ProfileView: View {
                             
                             // Buddies Section
                             buddiesSection()
-                            
+
+                            // See All My Reviews Button
+                            Button(action: {
+                                notificationManager.pendingDeepLink = .myRatings
+                            }) {
+                                HStack {
+                                    Image("AppLogo")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 28, height: 28)
+
+                                    Text("my ratings")
+                                        .font(.title3)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+
+                                    Spacer()
+
+                                    Text("\(ratingsManager.totalRatingsCount)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.white.opacity(0.7))
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.3))
+                                }
+                                .padding()
+                                .background(Color.white.opacity(0.05))
+                                .cornerRadius(12)
+                            }
+                            .buttonStyle(.plain)
+
                             // Top 3 Artists
                             topItemsSection(
                                 title: "top 3 artists",

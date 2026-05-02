@@ -142,6 +142,8 @@ struct BuddyBoardView: View {
         switch deepLink {
         case .homePage:
             return
+        case .profilePage:
+            return
         default:
             break
         }
@@ -184,6 +186,8 @@ struct BuddyBoardView: View {
             break
         case .profilePage:
             break
+        case .myRatings:
+            selectedSection = .myRatings
         }
     }
     
@@ -661,7 +665,7 @@ struct RatingRow: View {
             if rating.hasReviewContent, let content = rating.reviewContent {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("review:")
+                        Text("\(rating.type == .artist ? "artist" : rating.type == .album ? "album" : "song") review:")
                             .font(.caption)
                             .fontWeight(.medium)
                             .foregroundColor(.secondary)
@@ -966,7 +970,7 @@ struct LibraryBuddyRatingRow: View {
             if rating.hasReviewContent, let content = rating.reviewContent {
                 Button(action: { navigateToReviews = true }) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("review:")
+                        Text("\(rating.type == .artist ? "artist" : rating.type == .album ? "album" : "song") review:")
                             .font(.caption)
                             .fontWeight(.medium)
                             .foregroundColor(.secondary)
@@ -1528,9 +1532,10 @@ struct RecommendationFeedRow: View {
             
             // Sender's message (if any) - "and said: message"
             if let message = recommendation.message, !message.isEmpty {
-                HStack(alignment: .top, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("and said:")
                         .font(.caption)
+                        .fontWeight(.medium)
                         .foregroundColor(.secondary)
                     Text(message)
                         .font(.subheadline)
@@ -1613,7 +1618,7 @@ struct RecommendationFeedRow: View {
             if let rating = receiverRating, rating.hasReviewContent, let content = rating.reviewContent {
                 HStack(alignment: .top, spacing: 6) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(receiverName)'s review:")
+                        Text("\(receiverName)'s \(rating.type == .artist ? "artist" : rating.type == .album ? "album" : "song") review:")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Text(content)

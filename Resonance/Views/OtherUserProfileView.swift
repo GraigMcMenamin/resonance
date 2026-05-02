@@ -45,6 +45,35 @@ struct OtherUserProfileView: View {
                         
                         // Buddies Section
                         buddiesSection()
+
+                        // See All Reviews Button
+                        NavigationLink(destination: OtherUserReviewsView(user: displayUser)) {
+                            HStack {
+                                Image("AppLogo")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 28, height: 28)
+
+                                Text("see all of \(user.username.map { "@\($0)" } ?? "their")'s reviews")
+                                    .font(.title3)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+
+                                Spacer()
+
+                                Text("\(viewModel.totalRatingsCount)")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.7))
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.3))
+                            }
+                            .padding()
+                            .background(Color.white.opacity(0.05))
+                            .cornerRadius(12)
+                        }
+                        .buttonStyle(.plain)
                         
                         // Top 3 Artists
                         if !viewModel.topArtists.isEmpty {

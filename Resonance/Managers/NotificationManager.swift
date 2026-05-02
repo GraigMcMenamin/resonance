@@ -22,6 +22,8 @@ enum NotificationDeepLink: Equatable {
     case homePage
     /// Navigate to profile page (for buddy request notifications)
     case profilePage
+    /// Navigate to my ratings tab on the buddy board
+    case myRatings
 }
 
 @MainActor
