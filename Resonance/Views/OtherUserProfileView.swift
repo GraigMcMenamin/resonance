@@ -40,12 +40,8 @@ struct OtherUserProfileView: View {
                         // User Profile Header
                         userProfileHeader()
                         
-                        // Buddy Button
-                        buddyActionSection()
-                        
-                        // Buddies Section
-                        buddiesSection()
-
+                        // See All Reviews / Buddies / Buddy Button
+                        VStack(spacing: 8) {
                         // See All Reviews Button
                         NavigationLink(destination: OtherUserReviewsView(user: displayUser)) {
                             HStack {
@@ -54,7 +50,7 @@ struct OtherUserProfileView: View {
                                     .scaledToFit()
                                     .frame(width: 28, height: 28)
 
-                                Text("see all of \(user.username.map { "@\($0)" } ?? "their")'s reviews")
+                                Text("see all reviews")
                                     .font(.title3)
                                     .fontWeight(.semibold)
                                     .foregroundColor(.white)
@@ -69,11 +65,19 @@ struct OtherUserProfileView: View {
                                     .font(.caption)
                                     .foregroundColor(.white.opacity(0.3))
                             }
-                            .padding()
+                            .padding(.vertical, 10)
+                            .padding(.horizontal)
                             .background(Color.white.opacity(0.05))
                             .cornerRadius(12)
                         }
                         .buttonStyle(.plain)
+
+                        // Buddies Section
+                        buddiesSection()
+
+                        // Buddy Button
+                        buddyActionSection()
+                        } // end buttons VStack
                         
                         // Top 3 Artists
                         if !viewModel.topArtists.isEmpty {
@@ -184,8 +188,9 @@ struct OtherUserProfileView: View {
                         .font(.headline)
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.purple)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal)
+                        .background(Color.purple.opacity(0.45))
                         .cornerRadius(12)
                     }
                     .disabled(isSendingRequest)
@@ -357,7 +362,8 @@ struct OtherUserProfileView: View {
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.3))
             }
-            .padding()
+            .padding(.vertical, 10)
+            .padding(.horizontal)
             .background(Color.white.opacity(0.05))
             .cornerRadius(12)
         }

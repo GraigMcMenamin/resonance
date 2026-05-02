@@ -67,7 +67,8 @@ struct ProfileView: View {
                                 buddyRequestsSection()
                             }
                             
-                            // Buddies Section
+                            // Buddies Section / My Ratings
+                            VStack(spacing: 8) {
                             buddiesSection()
 
                             // See All My Reviews Button
@@ -95,11 +96,13 @@ struct ProfileView: View {
                                         .font(.caption)
                                         .foregroundColor(.white.opacity(0.3))
                                 }
-                                .padding()
+                                .padding(.vertical, 10)
+                                .padding(.horizontal)
                                 .background(Color.white.opacity(0.05))
                                 .cornerRadius(12)
                             }
                             .buttonStyle(.plain)
+                            } // end buttons VStack
 
                             // Top 3 Artists
                             topItemsSection(
@@ -965,7 +968,8 @@ struct ProfileView: View {
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.3))
             }
-            .padding()
+            .padding(.vertical, 10)
+            .padding(.horizontal)
             .background(Color.white.opacity(0.05))
             .cornerRadius(12)
         }

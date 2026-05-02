@@ -13,6 +13,8 @@ struct OtherUserReviewsView: View {
     @StateObject private var viewModel = OtherUserReviewsViewModel()
     @State private var selectedFilter: RatingFilter = .all
     @State private var anchorId: String? = nil
+    @State private var reviewNavRating: UserRating? = nil
+    @State private var musicNavRating: UserRating? = nil
 
     let user: AppUser
 
@@ -31,6 +33,34 @@ struct OtherUserReviewsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Hidden NavigationLink for review text navigation
+            NavigationLink(
+                destination: reviewsListView(for: reviewNavRating),
+                isActive: Binding(
+                    get: { reviewNavRating != nil },
+                    set: { if !$0 { reviewNavRating = nil } }
+                )
+            ) {
+                EmptyView()
+            }
+            .hidden()
+            .frame(width: 0, height: 0)
+
+            // Hidden NavigationLink for music view navigation
+            NavigationLink(
+                destination: Group {
+                    if let r = musicNavRating { destinationView(for: r) }
+                },
+                isActive: Binding(
+                    get: { musicNavRating != nil },
+                    set: { if !$0 { musicNavRating = nil } }
+                )
+            ) {
+                EmptyView()
+            }
+            .hidden()
+            .frame(width: 0, height: 0)
+
             // Filter Picker
             Picker("Filter", selection: $selectedFilter) {
                 Text("all").tag(RatingFilter.all)
@@ -72,21 +102,19 @@ struct OtherUserReviewsView: View {
                         .listRowSeparator(.hidden)
                     } else {
                         ForEach(filteredRatings) { rating in
-                            NavigationLink(destination: destinationView(for: rating)) {
-                                RatingRow(rating: rating)
-                            }
-                            .id(rating.id)
-                            .simultaneousGesture(
-                                TapGesture().onEnded {
+                            RatingRow(rating: rating, onReviewTapped: rating.hasReviewContent ? { reviewNavRating = rating } : nil)
+                                .id(rating.id)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
                                     anchorId = rating.id
+                                    musicNavRating = rating
                                 }
-                            )
-                            .onAppear {
-                                if rating.id == filteredRatings.last?.id,
-                                   viewModel.hasMore {
-                                    Task { await viewModel.loadMore(firebaseService: firebaseService) }
+                                .onAppear {
+                                    if rating.id == filteredRatings.last?.id,
+                                       viewModel.hasMore {
+                                        Task { await viewModel.loadMore(firebaseService: firebaseService) }
+                                    }
                                 }
-                            }
                         }
 
                         if viewModel.isLoading && !viewModel.ratings.isEmpty {
@@ -125,6 +153,30 @@ struct OtherUserReviewsView: View {
     }
 
     // MARK: - Navigation Destinations
+
+    @ViewBuilder
+    private func reviewsListView(for rating: UserRating?) -> some View {
+        if let rating = rating {
+            let reviewType: Review.ReviewType = {
+                switch rating.type {
+                case .artist: return .artist
+                case .album: return .album
+                case .track: return .track
+                }
+            }()
+            ReviewsListView(
+                spotifyId: rating.spotifyId,
+                itemName: rating.name,
+                artistName: rating.artistName,
+                imageURL: rating.imageURL.flatMap { URL(string: $0) },
+                reviewType: reviewType,
+                scrollToReviewId: rating.id,
+                initialSelectedLength: rating.reviewLength ?? .short
+            )
+        } else {
+            EmptyView()
+        }
+    }
 
     @ViewBuilder
     private func destinationView(for rating: UserRating) -> some View {

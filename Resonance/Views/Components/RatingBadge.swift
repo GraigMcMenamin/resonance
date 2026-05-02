@@ -81,11 +81,13 @@ struct RatingBadge: View {
     }
 }
 
-/// Compact version for list items
+/// Compact version for list items — fixed-width columns with a divider line
 struct RatingBadgeCompact: View {
     let spotifyId: String
     @ObservedObject var ratingsManager: RatingsManager
     let userId: String?
+    /// When provided, used instead of querying ratingsManager (avoids global state mutation).
+    var averageRatingOverride: Double? = nil
     
     private var userRating: UserRating? {
         guard let userId = userId else { return nil }
@@ -94,32 +96,29 @@ struct RatingBadgeCompact: View {
     }
     
     private var averageRating: Double? {
-        ratingsManager.getAverageRating(for: spotifyId)
+        averageRatingOverride ?? ratingsManager.getAverageRating(for: spotifyId)
     }
     
     var body: some View {
-        HStack(spacing: 10) {
-            // User's rating - shown first (left side)
-            if let rating = userRating {
-                Text("\(rating.percentage)%")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-            }
+        HStack(spacing: 0) {
+            // User rating column
+            Text(userRating.map { "\($0.percentage)" } ?? "")
+                .font(.subheadline)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+                .frame(width: 50, alignment: .center)
             
-            // Average rating - shown second (right side), bigger with bar below
-            if let average = averageRating {
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text("\(Int(average))%")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                    
-                    // Colored rating bar below
-                    RatingBarMini(percentage: average)
-                        .frame(width: 50, height: 6)
-                }
-            }
+            // Column divider
+            Rectangle()
+                .fill(Color.white.opacity(0.15))
+                .frame(width: 1)
+            
+            // Average rating column
+            Text(averageRating.map { "\(Int($0))" } ?? "")
+                .font(.subheadline)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+                .frame(width: 55, alignment: .center)
         }
     }
 }

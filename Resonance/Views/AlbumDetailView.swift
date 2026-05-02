@@ -27,6 +27,8 @@ struct AlbumDetailView: View {
     @State private var buddyRatings: [UserRating] = []
     @State private var showSendSheet = false
     @State private var itemUserRating: UserRating?
+    /// Track average ratings fetched locally — never writes to the global allRatings store.
+    @State private var trackAverageRatings: [String: Double] = [:]
     
     var body: some View {
         ZStack {
@@ -372,17 +374,28 @@ struct AlbumDetailView: View {
                 Spacer()
                 
                 // Column headers for ratings
-                HStack(spacing: 10) {
-                    Text("your %")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
+                HStack(spacing: 0) {
+                    VStack(spacing: 1) {
+                        Text("your")
+                        Text("rating")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.6))
+                    .frame(width: 50, alignment: .center)
                     
-                    Text("avg %")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                        .frame(width: 50, alignment: .trailing)
+                    Rectangle()
+                        .fill(Color.white.opacity(0.15))
+                        .frame(width: 1, height: 28)
+                    
+                    VStack(spacing: 1) {
+                        Text("average")
+                        Text("rating")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.6))
+                    .frame(width: 55, alignment: .center)
                 }
-                .padding(.trailing, 20) // Account for chevron
+                .padding(.trailing, 32) // Account for row inner padding + chevron spacing + chevron width
             }
             .padding(.horizontal)
             
@@ -400,7 +413,8 @@ struct AlbumDetailView: View {
                             track: track,
                             albumImageURL: album?.imageURL,
                             ratingsManager: ratingsManager,
-                            userId: authManager.currentUser?.id
+                            userId: authManager.currentUser?.id,
+                            averageRatingOverride: trackAverageRatings[track.id]
                         )
                     }
                     .buttonStyle(.plain)
@@ -444,6 +458,15 @@ struct AlbumDetailView: View {
         }
         
         isLoading = false
+        
+        // Fetch track ratings into local state — never mutates the global allRatings,
+        // so parent views (e.g. SongDetailView) are never invalidated and the
+        // NavigationLink cannot pop unexpectedly.
+        if let trackIds = album?.tracks.items.map({ $0.id }), !trackIds.isEmpty {
+            if let fetched = try? await firebaseService.fetchAverageRatings(for: trackIds) {
+                trackAverageRatings = fetched
+            }
+        }
     }
 }
 
@@ -454,6 +477,7 @@ struct AlbumTrackRowView: View {
     let albumImageURL: URL?
     @ObservedObject var ratingsManager: RatingsManager
     let userId: String?
+    var averageRatingOverride: Double? = nil
     
     var body: some View {
         HStack(spacing: 12) {
@@ -480,7 +504,7 @@ struct AlbumTrackRowView: View {
             Spacer()
             
             // Rating
-            RatingBadgeCompact(spotifyId: track.id, ratingsManager: ratingsManager, userId: userId)
+            RatingBadgeCompact(spotifyId: track.id, ratingsManager: ratingsManager, userId: userId, averageRatingOverride: averageRatingOverride)
             
             Image(systemName: "chevron.right")
                 .font(.caption)

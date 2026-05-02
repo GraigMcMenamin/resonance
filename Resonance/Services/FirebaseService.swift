@@ -348,6 +348,46 @@ class FirebaseService: ObservableObject {
         return allRatings.filter { $0.spotifyId == spotifyId }.count
     }
     
+    /// Fetches all ratings for a list of Spotify IDs and merges them into allRatings.
+    /// Used to ensure track ratings are available even if they fall outside the
+    /// real-time listener's 500-entry window.
+    func fetchAndMergeRatings(for spotifyIds: [String]) async throws {
+        guard !spotifyIds.isEmpty else { return }
+        let chunks = spotifyIds.chunked(into: 30)
+        var fetched: [UserRating] = []
+        for chunk in chunks {
+            let snapshot = try await db.collection("ratings")
+                .whereField("spotifyId", in: chunk)
+                .getDocuments()
+            fetched += snapshot.documents.compactMap { try? $0.data(as: UserRating.self) }
+        }
+        let existingIds = Set(allRatings.map { $0.id })
+        let newRatings = fetched.filter { !existingIds.contains($0.id) }
+        if !newRatings.isEmpty {
+            allRatings.append(contentsOf: newRatings)
+        }
+    }
+    
+    /// Fetches average ratings for a list of Spotify IDs and returns them as a dictionary.
+    /// Does NOT mutate allRatings, so no @Published changes are triggered and parent
+    /// views are not invalidated.
+    func fetchAverageRatings(for spotifyIds: [String]) async throws -> [String: Double] {
+        guard !spotifyIds.isEmpty else { return [:] }
+        let chunks = spotifyIds.chunked(into: 30)
+        var fetched: [UserRating] = []
+        for chunk in chunks {
+            let snapshot = try await db.collection("ratings")
+                .whereField("spotifyId", in: chunk)
+                .getDocuments()
+            fetched += snapshot.documents.compactMap { try? $0.data(as: UserRating.self) }
+        }
+        let grouped = Dictionary(grouping: fetched) { $0.spotifyId }
+        return grouped.mapValues { ratings in
+            let total = ratings.reduce(0) { $0 + $1.percentage }
+            return Double(total) / Double(ratings.count)
+        }
+    }
+    
     // MARK: - User Profile Operations
     
     func saveUserProfile(_ user: AppUser) async throws {

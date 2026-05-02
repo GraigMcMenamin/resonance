@@ -28,6 +28,8 @@ struct BuddyBoardView: View {
     @State private var pendingCommentScrollData: (ratingId: String, commentId: String)? = nil
     @State private var hasBuddyFeedLoaded = false
     @State private var myRatingsAnchorId: String? = nil
+    @State private var reviewNavRating: UserRating? = nil
+    @State private var musicNavRating: UserRating? = nil
     
     var body: some View {
         NavigationView {
@@ -36,6 +38,34 @@ struct BuddyBoardView: View {
                 NavigationLink(
                     destination: deepLinkReviewsView,
                     isActive: $navigateToDeepLinkReviews
+                ) {
+                    EmptyView()
+                }
+                .hidden()
+                .frame(width: 0, height: 0)
+
+                // Hidden NavigationLink for review text navigation
+                NavigationLink(
+                    destination: reviewsListView(for: reviewNavRating),
+                    isActive: Binding(
+                        get: { reviewNavRating != nil },
+                        set: { if !$0 { reviewNavRating = nil } }
+                    )
+                ) {
+                    EmptyView()
+                }
+                .hidden()
+                .frame(width: 0, height: 0)
+
+                // Hidden NavigationLink for music view navigation
+                NavigationLink(
+                    destination: Group {
+                        if let r = musicNavRating { destinationView(for: r) }
+                    },
+                    isActive: Binding(
+                        get: { musicNavRating != nil },
+                        set: { if !$0 { musicNavRating = nil } }
+                    )
                 ) {
                     EmptyView()
                 }
@@ -227,22 +257,20 @@ struct BuddyBoardView: View {
                         .listRowSeparator(.hidden)
                     } else {
                         ForEach(filteredRatings) { rating in
-                            NavigationLink(destination: destinationView(for: rating)) {
-                                RatingRow(rating: rating)
-                            }
-                            .id(rating.id)
-                            .simultaneousGesture(
-                                TapGesture().onEnded {
+                            RatingRow(rating: rating, onReviewTapped: rating.hasReviewContent ? { reviewNavRating = rating } : nil)
+                                .id(rating.id)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
                                     myRatingsAnchorId = rating.id
+                                    musicNavRating = rating
                                 }
-                            )
-                            .onAppear {
-                                if rating.id == filteredRatings.last?.id,
-                                   ratingsManager.hasMoreRatings,
-                                   let userId = authManager.currentUser?.id {
-                                    Task { await ratingsManager.loadMoreUserRatings(userId: userId) }
+                                .onAppear {
+                                    if rating.id == filteredRatings.last?.id,
+                                       ratingsManager.hasMoreRatings,
+                                       let userId = authManager.currentUser?.id {
+                                        Task { await ratingsManager.loadMoreUserRatings(userId: userId) }
+                                    }
                                 }
-                            }
                         }
                         .onDelete(perform: deleteRatings)
 
@@ -500,6 +528,30 @@ struct BuddyBoardView: View {
         }
     }
     
+    @ViewBuilder
+    private func reviewsListView(for rating: UserRating?) -> some View {
+        if let rating = rating {
+            let reviewType: Review.ReviewType = {
+                switch rating.type {
+                case .artist: return .artist
+                case .album: return .album
+                case .track: return .track
+                }
+            }()
+            ReviewsListView(
+                spotifyId: rating.spotifyId,
+                itemName: rating.name,
+                artistName: rating.artistName,
+                imageURL: rating.imageURL.flatMap { URL(string: $0) },
+                reviewType: reviewType,
+                scrollToReviewId: rating.id,
+                initialSelectedLength: rating.reviewLength ?? .short
+            )
+        } else {
+            EmptyView()
+        }
+    }
+
     private var filteredRatings: [UserRating] {
         switch selectedFilter {
         case .all:
@@ -578,6 +630,7 @@ struct StatsCard: View {
 
 struct RatingRow: View {
     let rating: UserRating
+    var onReviewTapped: (() -> Void)? = nil
     
     private var percentageColor: Color {
         let pct = Double(rating.percentage)
@@ -663,7 +716,7 @@ struct RatingRow: View {
             
             // Review section
             if rating.hasReviewContent, let content = rating.reviewContent {
-                HStack {
+                let reviewLabel = HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("\(rating.type == .artist ? "artist" : rating.type == .album ? "album" : "song") review:")
                             .font(.caption)
@@ -676,12 +729,28 @@ struct RatingRow: View {
                             .multilineTextAlignment(.leading)
                     }
                     Spacer()
+                    if onReviewTapped != nil {
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 2)
+                    }
                 }
                 .padding(.top, 8)
                 .padding(.leading, 72)
+
+                if let onReviewTapped = onReviewTapped {
+                    Button(action: onReviewTapped) {
+                        reviewLabel
+                    }
+                    .buttonStyle(.borderless)
+                } else {
+                    reviewLabel
+                }
             }
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
 
