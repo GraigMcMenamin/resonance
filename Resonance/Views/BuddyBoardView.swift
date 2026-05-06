@@ -358,6 +358,7 @@ struct BuddyBoardView: View {
                         }
                     }
                     .listStyle(.plain)
+                    .scrollDismissesKeyboard(.interactively)
                     .refreshable {
                         await loadBuddyRatings()
                     }
@@ -747,6 +748,13 @@ struct RatingRow: View {
                 } else {
                     reviewLabel
                 }
+                
+                if rating.reviewDateUpdated != nil {
+                    Text("edited")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 72)
+                }
             }
         }
         .padding(.vertical, 4)
@@ -845,6 +853,7 @@ struct LibraryBuddyRatingRow: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var buddyManager: BuddyManager
+    @EnvironmentObject var notificationManager: NotificationManager
     
     @State private var isLiked = false
     @State private var likesCount = 0
@@ -860,6 +869,7 @@ struct LibraryBuddyRatingRow: View {
     @State private var navigateToMusic = false
     @State private var navigateToReviews = false
     @State private var navigateToProfile = false
+    @State private var navigateToCommentUserId: String? = nil
     @State private var showAllComments = false
     @State private var hasLoadedInteractions = false
     @State private var hasLoadedComments = false
@@ -910,11 +920,21 @@ struct LibraryBuddyRatingRow: View {
             }
             .hidden()
             .frame(width: 0, height: 0)
+
+            NavigationLink(
+                destination: BuddyProfileDestination(userId: navigateToCommentUserId ?? ""),
+                isActive: Binding(
+                    get: { navigateToCommentUserId != nil },
+                    set: { if !$0 { navigateToCommentUserId = nil } }
+                )
+            ) { EmptyView() }
+            .hidden()
+            .frame(width: 0, height: 0)
             
             // Header with buddy info
             HStack(spacing: 8) {
                 // Buddy avatar - tappable to view profile
-                Button(action: { navigateToProfile = true }) {
+                Button(action: handleProfileTap) {
                     if let imageURLString = rating.userImageURL, let url = URL(string: imageURLString) {
                         CustomAsyncImage(url: url) { phase in
                             switch phase {
@@ -948,7 +968,7 @@ struct LibraryBuddyRatingRow: View {
                 }
                 .buttonStyle(.plain)
                 
-                Button(action: { navigateToProfile = true }) {
+                Button(action: handleProfileTap) {
                     Text(rating.username ?? "Unknown")
                         .font(.subheadline)
                         .fontWeight(.semibold)
@@ -1073,6 +1093,13 @@ struct LibraryBuddyRatingRow: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 4)
+                
+                if rating.reviewDateUpdated != nil {
+                    Text("edited")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.4))
+                        .padding(.top, 2)
+                }
             }
             
             // Like and Comment buttons on bottom right
@@ -1204,6 +1231,24 @@ struct LibraryBuddyRatingRow: View {
             Task { await loadComments() }
         }
     }
+
+    private func handleProfileTap() {
+        if authManager.currentUser?.id == rating.userId {
+            notificationManager.pendingDeepLink = .profilePage
+            return
+        }
+
+        navigateToProfile = true
+    }
+
+    private func handleCommentUserTap(_ userId: String) {
+        if authManager.currentUser?.id == userId {
+            notificationManager.pendingDeepLink = .profilePage
+            return
+        }
+
+        navigateToCommentUserId = userId
+    }
     
     private var commentsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1297,6 +1342,7 @@ struct LibraryBuddyRatingRow: View {
                             showComments = true
                             isCommentFieldFocused = true
                         },
+                        onUserTap: handleCommentUserTap,
                         largerIcons: true
                     )
                     .environmentObject(authManager)
@@ -1405,6 +1451,8 @@ struct LibraryBuddyRatingRow: View {
         guard let user = authManager.currentUser else { return }
         let trimmedComment = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedComment.isEmpty else { return }
+        
+        isCommentFieldFocused = false
         
         let finalComment = String(trimmedComment.prefix(150))
         let replyId = replyingToComment?.id
@@ -1543,25 +1591,6 @@ struct RecommendationFeedRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Hidden NavigationLinks for profile navigation
-            NavigationLink(destination: BuddyProfileDestination(userId: recommendation.senderId), isActive: $navigateToSenderProfile) {
-                EmptyView()
-            }
-            .hidden()
-            .frame(width: 0, height: 0)
-
-            NavigationLink(destination: BuddyProfileDestination(userId: recommendation.receiverId), isActive: $navigateToReceiverProfile) {
-                EmptyView()
-            }
-            .hidden()
-            .frame(width: 0, height: 0)
-
-            NavigationLink(destination: musicDestination, isActive: $navigateToMusic) {
-                EmptyView()
-            }
-            .hidden()
-            .frame(width: 0, height: 0)
-
             // Header: "sender sent receiver"
             HStack(spacing: 6) {
                 // Sender avatar + name - tappable
@@ -1700,6 +1729,13 @@ struct RecommendationFeedRow: View {
             }
         }
         .padding(.vertical, 8)
+        .background(
+            Group {
+                NavigationLink(destination: BuddyProfileDestination(userId: recommendation.senderId), isActive: $navigateToSenderProfile) { EmptyView() }
+                NavigationLink(destination: BuddyProfileDestination(userId: recommendation.receiverId), isActive: $navigateToReceiverProfile) { EmptyView() }
+                NavigationLink(destination: musicDestination, isActive: $navigateToMusic) { EmptyView() }
+            }
+        )
     }
     
     @ViewBuilder

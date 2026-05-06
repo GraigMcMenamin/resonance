@@ -174,10 +174,10 @@ struct BuddyRatingsSection: View {
     }
     
     private var displayedRatings: [UserRating] {
-        if showAllRatings || filteredBuddyRatings.count <= 3 {
+        if showAllRatings || filteredBuddyRatings.count <= 5 {
             return filteredBuddyRatings
         } else {
-            return Array(filteredBuddyRatings.prefix(3))
+            return Array(filteredBuddyRatings.prefix(5))
         }
     }
     
@@ -237,14 +237,14 @@ struct BuddyRatingsSection: View {
                     }
                     
                     // See More / See Less button
-                    if filteredBuddyRatings.count > 3 {
+                    if filteredBuddyRatings.count > 5 {
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 showAllRatings.toggle()
                             }
                         }) {
                             HStack {
-                                Text(showAllRatings ? "see less" : "see more (\(filteredBuddyRatings.count - 3) more)")
+                                Text(showAllRatings ? "see less" : "see more (\(filteredBuddyRatings.count - 5) more)")
                                     .font(.caption)
                                     .fontWeight(.medium)
                                 Image(systemName: showAllRatings ? "chevron.up" : "chevron.down")
@@ -271,15 +271,16 @@ struct BuddyProfileDestination: View {
     
     var body: some View {
         Group {
-            if isLoading {
+            // Own profile: resolve synchronously so no state flip occurs during push animation
+            if authManager.currentUser?.id == userId {
+                ProfileView(isEmbedded: true)
+            } else if isLoading {
                 ZStack {
                     Color(red: 0.15, green: 0.08, blue: 0.18)
                         .ignoresSafeArea()
                     ProgressView()
                         .tint(.white)
                 }
-            } else if authManager.currentUser?.id == userId {
-                ProfileView()
             } else if let user = user {
                 OtherUserProfileView(user: user)
             } else {
@@ -292,13 +293,11 @@ struct BuddyProfileDestination: View {
             }
         }
         .task {
-            // Only fetch if it's not the current user
-            if authManager.currentUser?.id != userId {
-                do {
-                    user = try await firebaseService.getUserProfile(userId: userId)
-                } catch {
-                    print("Error fetching user: \(error)")
-                }
+            guard authManager.currentUser?.id != userId else { return }
+            do {
+                user = try await firebaseService.getUserProfile(userId: userId)
+            } catch {
+                print("Error fetching user: \(error)")
             }
             isLoading = false
         }
@@ -317,6 +316,7 @@ struct BuddyRatingRow: View {
     var profileDestination: AnyView? = nil
     /// When provided, the review text section becomes a NavigationLink to this destination.
     var reviewDestination: AnyView? = nil
+    @EnvironmentObject var notificationManager: NotificationManager
     
     private var ratingColor: Color {
         colorForPercentage(Double(rating.percentage))
@@ -341,7 +341,12 @@ struct BuddyRatingRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Profile section — tappable when profileDestination is provided
-            if let profileDest = profileDestination {
+            if isCurrentUser {
+                Button(action: { notificationManager.pendingDeepLink = .profilePage }) {
+                    profileHeaderContent
+                }
+                .buttonStyle(.plain)
+            } else if let profileDest = profileDestination {
                 NavigationLink(destination: profileDest) {
                     profileHeaderContent
                 }
@@ -428,7 +433,7 @@ struct BuddyRatingRow: View {
             }
             
             // Chevron to indicate tappable profile area
-            if profileDestination != nil {
+            if isCurrentUser || profileDestination != nil {
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.3))

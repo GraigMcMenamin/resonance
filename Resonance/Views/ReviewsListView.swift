@@ -20,6 +20,7 @@ struct ReviewsListView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var buddyManager: BuddyManager
+    @EnvironmentObject var notificationManager: NotificationManager
     
     @State private var reviews: [Review] = []
     @State private var reviewLikeCounts: [String: Int] = [:]
@@ -27,6 +28,7 @@ struct ReviewsListView: View {
     @State private var errorMessage: String?
     @State private var selectedLength: Review.ReviewLength
     @State private var didScrollToTarget = false
+    @State private var navigateToUserId: String? = nil
     
     init(spotifyId: String, itemName: String, artistName: String?, imageURL: URL?, reviewType: Review.ReviewType, scrollToReviewId: String? = nil, scrollToCommentId: String? = nil, initialSelectedLength: Review.ReviewLength = .short) {
         self.spotifyId = spotifyId
@@ -46,6 +48,16 @@ struct ReviewsListView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
+                NavigationLink(
+                    destination: BuddyProfileDestination(userId: navigateToUserId ?? ""),
+                    isActive: Binding(
+                        get: { navigateToUserId != nil },
+                        set: { if !$0 { navigateToUserId = nil } }
+                    )
+                ) { EmptyView() }
+                .hidden()
+                .frame(width: 0, height: 0)
+
                 lengthFilterSection
                 
                 if isLoading {
@@ -87,7 +99,8 @@ struct ReviewsListView: View {
                                         scrollToCommentId: review.id == scrollToReviewId ? scrollToCommentId : nil,
                                         onDelete: {
                                             await deleteReview(review)
-                                        }
+                                        },
+                                        onUserTap: handleUserTap
                                     )
                                     .id(review.id)
                                     .environmentObject(authManager)
@@ -96,6 +109,7 @@ struct ReviewsListView: View {
                             }
                             .padding()
                         }
+                        .scrollDismissesKeyboard(.interactively)
                         .onChange(of: isLoading) { loading in
                             if !loading, !didScrollToTarget, let targetId = scrollToReviewId {
                                 // Auto-select the correct length tab for the target review
@@ -211,6 +225,15 @@ struct ReviewsListView: View {
             print("Error deleting review: \(error)")
         }
     }
+
+    private func handleUserTap(_ userId: String) {
+        if authManager.currentUser?.id == userId {
+            notificationManager.pendingDeepLink = .profilePage
+            return
+        }
+
+        navigateToUserId = userId
+    }
 }
 
 struct ReviewCard: View {
@@ -220,6 +243,7 @@ struct ReviewCard: View {
     var autoExpandComments: Bool = false
     var scrollToCommentId: String? = nil
     var onDelete: (() async -> Void)? = nil
+    var onUserTap: ((String) -> Void)? = nil
     
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
@@ -242,6 +266,7 @@ struct ReviewCard: View {
     @State private var mentionSuggestions: [AppUser] = []
     @State private var showMentionSuggestions = false
     @State private var mentionSearchTask: Task<Void, Never>? = nil
+    @FocusState private var isCommentFieldFocused: Bool
     
     private let maxVisibleComments = 3
     
@@ -252,40 +277,45 @@ struct ReviewCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                if let imageURLString = review.userImageURL, let imageURL = URL(string: imageURLString) {
-                    CustomAsyncImage(url: imageURL) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 40, height: 40)
-                                .clipShape(Circle())
-                        default:
+                Button(action: { onUserTap?(review.userId) }) {
+                    HStack(spacing: 12) {
+                        if let imageURLString = review.userImageURL, let imageURL = URL(string: imageURLString) {
+                            CustomAsyncImage(url: imageURL) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 40, height: 40)
+                                        .clipShape(Circle())
+                                default:
+                                    defaultAvatar
+                                }
+                            }
+                        } else {
                             defaultAvatar
                         }
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let username = review.username {
+                                Text("@\(username)")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                            } else {
+                                Text("User")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                            
+                            Text(formattedDate)
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.5))
+                        }
                     }
-                } else {
-                    defaultAvatar
                 }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    if let username = review.username {
-                        Text("@\(username)")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                    } else {
-                        Text("User")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white.opacity(0.5))
-                    }
-                    
-                    Text(formattedDate)
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.5))
-                }
+                .buttonStyle(.plain)
                 
                 Spacer()
                 
@@ -448,6 +478,7 @@ struct ReviewCard: View {
                             .background(Color.white.opacity(0.1))
                             .cornerRadius(20)
                             .foregroundColor(.white)
+                            .focused($isCommentFieldFocused)
                             .onChange(of: newCommentText) { newValue in
                                 if newValue.count > 150 {
                                     newCommentText = String(newValue.prefix(150))
@@ -527,7 +558,8 @@ struct ReviewCard: View {
                             onReply: { replyComment in
                                 replyingToComment = replyComment
                                 showComments = true
-                            }
+                            },
+                            onUserTap: onUserTap
                         )
                         .environmentObject(authManager)
                         .environmentObject(firebaseService)
@@ -557,7 +589,8 @@ struct ReviewCard: View {
                             onReply: { replyComment in
                                 replyingToComment = replyComment
                                 showComments = true
-                            }
+                            },
+                            onUserTap: onUserTap
                         )
                         .environmentObject(authManager)
                         .environmentObject(firebaseService)
@@ -682,6 +715,8 @@ struct ReviewCard: View {
         let trimmedComment = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedComment.isEmpty else { return }
         
+        isCommentFieldFocused = false
+        
         let finalComment = String(trimmedComment.prefix(150))
         let replyId = replyingToComment?.id
         let replyUsername = replyingToComment?.username
@@ -703,6 +738,7 @@ struct ReviewCard: View {
                     commentsCount += 1
                     newCommentText = ""
                     replyingToComment = nil
+                    isCommentFieldFocused = false
                 }
             } catch {
                 print("Error submitting comment: \(error)")
@@ -770,6 +806,7 @@ struct CommentRow: View {
     let initialLikesCount: Int
     let onDelete: () async -> Void
     var onReply: ((ReviewComment) -> Void)? = nil
+    var onUserTap: ((String) -> Void)? = nil
     var largerIcons: Bool = false
     
     @EnvironmentObject var authManager: AuthenticationManager
@@ -779,8 +816,6 @@ struct CommentRow: View {
     @State private var isLiked = false
     @State private var likesCount = 0
     @State private var isTogglingLike = false
-    @State private var mentionUserId: String? = nil
-    @State private var isMentionNavActive = false
     
     var isOwnComment: Bool {
         authManager.currentUser?.id == comment.userId
@@ -788,30 +823,36 @@ struct CommentRow: View {
     
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            if let imageURLString = comment.userImageURL, let imageURL = URL(string: imageURLString) {
-                CustomAsyncImage(url: imageURL) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 28, height: 28)
-                            .clipShape(Circle())
-                    default:
-                        defaultAvatar
+            Button(action: { onUserTap?(comment.userId) }) {
+                if let imageURLString = comment.userImageURL, let imageURL = URL(string: imageURLString) {
+                    CustomAsyncImage(url: imageURL) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 28, height: 28)
+                                .clipShape(Circle())
+                        default:
+                            defaultAvatar
+                        }
                     }
+                } else {
+                    defaultAvatar
                 }
-            } else {
-                defaultAvatar
             }
+            .buttonStyle(.plain)
             
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     if let username = comment.username {
-                        Text("@\(username)")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
+                        Button(action: { onUserTap?(comment.userId) }) {
+                            Text("@\(username)")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                        }
+                        .buttonStyle(.plain)
                     } else {
                         Text("User")
                             .font(.caption)
@@ -879,8 +920,7 @@ struct CommentRow: View {
                     Task {
                         if let user = try? await firebaseService.getUserByUsername(username) {
                             await MainActor.run {
-                                mentionUserId = user.id
-                                isMentionNavActive = true
+                                onUserTap?(user.id)
                             }
                         }
                     }
@@ -891,13 +931,6 @@ struct CommentRow: View {
             }
         }
         .padding(.vertical, 6)
-        .background(
-            NavigationLink(
-                destination: BuddyProfileDestination(userId: mentionUserId ?? ""),
-                isActive: $isMentionNavActive
-            ) { EmptyView() }
-            .hidden()
-        )
         .confirmationDialog("Delete Comment", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 Task {
