@@ -390,9 +390,14 @@ struct HomeView: View {
             )
         }
         
-        // Sort by average percentage and limit
+        // Sort by average percentage, then by total ratings as tiebreaker
         return aggregated
-            .sorted { $0.averagePercentage > $1.averagePercentage }
+            .sorted {
+                if $0.averagePercentage != $1.averagePercentage {
+                    return $0.averagePercentage > $1.averagePercentage
+                }
+                return $0.totalRatings > $1.totalRatings
+            }
             .prefix(limit)
             .map { $0 }
     }

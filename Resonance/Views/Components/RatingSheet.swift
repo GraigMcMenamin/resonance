@@ -441,17 +441,16 @@ struct RatingSheet: View {
     }
     
     private func colorForPercentage(_ value: Double) -> Color {
-        switch value {
-        case 0..<40:
-            return .red
-        case 40..<60:
-            return .orange
-        case 60..<75:
-            return .yellow
-        case 75..<90:
-            return Color(red: 0.6, green: 0.8, blue: 0.2)
-        default:
+        if value >= 80 {
             return .green
+        } else if value >= 60 {
+            return Color(red: 0.6, green: 0.8, blue: 0.2)
+        } else if value >= 40 {
+            return .yellow
+        } else if value >= 20 {
+            return .orange
+        } else {
+            return .red
         }
     }
     

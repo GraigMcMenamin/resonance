@@ -333,7 +333,12 @@ class FirebaseService: ObservableObject {
                 currentUserRating: currentUserRating
             )
         }
-        .sorted { $0.averagePercentage > $1.averagePercentage }
+        .sorted {
+            if $0.averagePercentage != $1.averagePercentage {
+                return $0.averagePercentage > $1.averagePercentage
+            }
+            return $0.totalRatings > $1.totalRatings
+        }
     }
     
     func getAverageRating(for spotifyId: String) -> Double? {
