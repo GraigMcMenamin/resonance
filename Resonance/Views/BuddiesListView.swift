@@ -3,7 +3,7 @@
 //  Resonance
 //
 //  Created by Claude on 1/23/26.
-// teat!!!!!
+//
 
 import SwiftUI
 
