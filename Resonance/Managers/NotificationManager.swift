@@ -300,8 +300,8 @@ class NotificationManager: NSObject, ObservableObject {
         
         do {
             let recommendations = try await firebaseService.getReceivedRecommendations(userId: userId)
-            // Get user's ratings to filter out already rated items
-            let userRatings = firebaseService.allRatings.filter { $0.userId == userId }
+            // Get user's full rating history (not the capped allRatings) to filter out already rated items
+            let userRatings = try await firebaseService.getUserRatings(userId: userId)
             let ratedSpotifyIds = Set(userRatings.map { $0.spotifyId })
             
             let pendingCount = recommendations.filter { rec in

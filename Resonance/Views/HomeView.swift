@@ -248,8 +248,10 @@ struct HomeView: View {
             }
             
             // Filter to only pending ones (not yet rated by THIS user)
-            // Only check against the CURRENT USER's ratings, not all ratings
-            let myRatings = firebaseService.allRatings.filter { $0.userId == userId }
+            // Fetch the user's full rating history directly instead of relying on
+            // firebaseService.allRatings, which is capped to the 500 most recent
+            // ratings app-wide and may not include this user's older ratings.
+            let myRatings = try await firebaseService.getUserRatings(userId: userId)
             let ratingsSet = Set(myRatings.map { $0.spotifyId })
             print("[HomeView] Current user's rated spotifyIds: \(ratingsSet)")
             
