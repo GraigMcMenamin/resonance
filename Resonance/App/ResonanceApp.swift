@@ -21,6 +21,7 @@ struct ResonanceApp: App {
     @StateObject private var spotifyService = SpotifyService()
     @StateObject private var buddyManager = BuddyManager()
     @StateObject private var notificationManager = NotificationManager()
+    @StateObject private var mailboxManager = MailboxManager()
     
     init() {
         // Firebase is configured in AppDelegate.didFinishLaunchingWithOptions
@@ -35,6 +36,7 @@ struct ResonanceApp: App {
                 .environmentObject(spotifyService)
                 .environmentObject(buddyManager)
                 .environmentObject(notificationManager)
+                .environmentObject(mailboxManager)
                 .onAppear {
                     setupNotifications()
                 }

@@ -26,6 +26,13 @@ service cloud.firestore {
         allow write: if isAuthenticated() && 
                        (request.auth.uid == userId || request.auth.uid == buddyId);
       }
+      
+      // Mailbox notifications subcollection (mentions, likes, replies)
+      // Only written by Cloud Functions (admin SDK bypasses rules); owner can read/mark-read/delete
+      match /notifications/{notificationId} {
+        allow read, update, delete: if isOwner(userId);
+        allow create: if false;
+      }
     }
     
     // Ratings collection - users can read all ratings, but only create/update/delete their own

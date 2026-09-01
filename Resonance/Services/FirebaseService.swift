@@ -1401,6 +1401,40 @@ class FirebaseService: ObservableObject {
             .delete()
     }
     
+    // MARK: - Mailbox Notifications (mentions, likes, replies)
+    
+    /// Get a user's persisted mailbox notifications, newest first
+    func getNotifications(userId: String) async throws -> [AppNotification] {
+        let snapshot = try await db.collection("users")
+            .document(userId)
+            .collection("notifications")
+            .order(by: "createdAt", descending: true)
+            .limit(to: 100)
+            .getDocuments()
+        
+        return snapshot.documents.compactMap { doc in
+            try? doc.data(as: AppNotification.self)
+        }
+    }
+    
+    /// Mark a mailbox notification as read
+    func markNotificationRead(userId: String, notificationId: String) async throws {
+        try await db.collection("users")
+            .document(userId)
+            .collection("notifications")
+            .document(notificationId)
+            .updateData(["read": true])
+    }
+    
+    /// Delete a mailbox notification
+    func deleteNotification(userId: String, notificationId: String) async throws {
+        try await db.collection("users")
+            .document(userId)
+            .collection("notifications")
+            .document(notificationId)
+            .delete()
+    }
+    
     // MARK: - FCM Token Management
     
     /// Save an FCM token for push notifications

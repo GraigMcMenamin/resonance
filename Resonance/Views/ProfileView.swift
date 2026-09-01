@@ -62,11 +62,6 @@ struct ProfileView: View {
                         
                         // Only show sections for authenticated users
                         if !authManager.isGuestMode {
-                            // Buddy Requests Section (if any pending)
-                            if !buddyManager.pendingRequests.isEmpty {
-                                buddyRequestsSection()
-                            }
-                            
                             // Buddies Section / My Ratings
                             VStack(spacing: 8) {
                             buddiesSection()
@@ -824,123 +819,6 @@ struct ProfileView: View {
                 imageURL: item.imageURL
             )
         }
-    }
-    
-    // MARK: - Buddy Request Section
-    
-    @ViewBuilder
-    private func buddyRequestsSection() -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("buddy requests")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                
-                Spacer()
-                
-                Text("\(buddyManager.pendingRequests.count)")
-                    .font(.caption)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.orange)
-                    .cornerRadius(10)
-            }
-            
-            VStack(spacing: 12) {
-                ForEach(buddyManager.pendingRequests) { request in
-                    buddyRequestRow(request: request)
-                }
-            }
-        }
-        .padding()
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(12)
-    }
-    
-    @ViewBuilder
-    private func buddyRequestRow(request: BuddyRequest) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                // Profile Image
-                if let imageURLString = request.fromImageURL, let imageURL = URL(string: imageURLString) {
-                    AsyncImage(url: imageURL) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Circle()
-                            .fill(Color.gray.opacity(0.3))
-                    }
-                    .frame(width: 50, height: 50)
-                    .clipShape(Circle())
-                } else {
-                    Circle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 50, height: 50)
-                        .overlay(
-                            Image(systemName: "person.fill")
-                                .foregroundColor(.white.opacity(0.5))
-                        )
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("From @\(request.fromUsername)")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    
-                    Text("Will you be my buddy?")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                
-                Spacer()
-            }
-            
-            // Accept/Reject buttons
-            HStack(spacing: 12) {
-                Button(action: {
-                    Task {
-                        await buddyManager.acceptRequest(request)
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: "checkmark")
-                        Text("Yes")
-                    }
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.green)
-                    .cornerRadius(8)
-                }
-                
-                Button(action: {
-                    Task {
-                        await buddyManager.rejectRequest(request)
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: "xmark")
-                        Text("No")
-                    }
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.red.opacity(0.7))
-                    .cornerRadius(8)
-                }
-            }
-        }
-        .padding()
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(10)
     }
     
     // MARK: - Buddies Section

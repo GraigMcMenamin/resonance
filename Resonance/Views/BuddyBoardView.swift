@@ -174,6 +174,8 @@ struct BuddyBoardView: View {
             return
         case .profilePage:
             return
+        case .mailbox:
+            return
         default:
             break
         }
@@ -215,6 +217,8 @@ struct BuddyBoardView: View {
         case .homePage:
             break
         case .profilePage:
+            break
+        case .mailbox:
             break
         case .myRatings:
             selectedSection = .myRatings

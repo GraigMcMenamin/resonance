@@ -11,6 +11,28 @@ const spotifyClientId = defineSecret("SPOTIFY_CLIENT_ID");
 const spotifyClientSecret = defineSecret("SPOTIFY_CLIENT_SECRET");
 
 /**
+ * Writes a persisted mailbox notification (mention, like, or reply) for a user.
+ * Read by the client's Mailbox tab in addition to the ephemeral push notification.
+ */
+async function addMailboxNotification(recipientId, data) {
+  try {
+    const ref = admin.firestore()
+      .collection("users")
+      .doc(recipientId)
+      .collection("notifications")
+      .doc();
+    await ref.set({
+      id: ref.id,
+      ...data,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      read: false,
+    });
+  } catch (error) {
+    console.error(`Error writing mailbox notification for ${recipientId}:`, error);
+  }
+}
+
+/**
  * Cloud Function: Create Firebase custom token from Spotify access token
  * 
  * This ensures the same Spotify user always gets the same Firebase UID,
@@ -532,6 +554,20 @@ exports.onReviewLikeCreated = onDocumentCreated(
         return;
       }
 
+      const hasReviewForMailbox = !!(ratingData.reviewContent && ratingData.reviewContent.trim() !== "");
+      await addMailboxNotification(ratingOwnerId, {
+        type: "like",
+        actorId: likerId,
+        actorUsername: likeData.username || "Someone",
+        ratingId: event.params.ratingId,
+        spotifyId: ratingData.spotifyId || "",
+        itemType: ratingData.type || "",
+        itemName: ratingData.name || "",
+        artistName: ratingData.artistName || "",
+        imageURL: ratingData.imageURL || "",
+        hasReviewContent: hasReviewForMailbox,
+      });
+
       const ownerDoc = await admin.firestore().collection("users").doc(ratingOwnerId).get();
       if (!ownerDoc.exists) return;
 
@@ -734,6 +770,23 @@ exports.onReviewCommentCreated = onDocumentCreated(
                 },
                 { type: "reply", ...baseData }
               );
+              if (originalCommenterId !== commenterId) {
+                await addMailboxNotification(originalCommenterId, {
+                  type: "reply",
+                  actorId: commenterId,
+                  actorUsername: commenterName,
+                  ratingId: event.params.ratingId,
+                  commentId: event.params.commentId,
+                  spotifyId: ratingData.spotifyId || "",
+                  itemType: ratingData.type || "",
+                  itemName: ratingData.name || "",
+                  artistName: ratingData.artistName || "",
+                  imageURL: ratingData.imageURL || "",
+                  hasReviewContent: hasReview,
+                  reviewLength: hasReview ? reviewLength : "short",
+                  preview: commentPreview,
+                });
+              }
               notifiedUsers.add(originalCommenterId);
               console.log(`Reply notification sent to original commenter ${originalCommenterId}`);
             }
@@ -773,6 +826,23 @@ exports.onReviewCommentCreated = onDocumentCreated(
                 },
                 { type: "mention", ...baseData }
               );
+              if (mentionedUserId !== commenterId) {
+                await addMailboxNotification(mentionedUserId, {
+                  type: "mention",
+                  actorId: commenterId,
+                  actorUsername: commenterName,
+                  ratingId: event.params.ratingId,
+                  commentId: event.params.commentId,
+                  spotifyId: ratingData.spotifyId || "",
+                  itemType: ratingData.type || "",
+                  itemName: ratingData.name || "",
+                  artistName: ratingData.artistName || "",
+                  imageURL: ratingData.imageURL || "",
+                  hasReviewContent: hasReview,
+                  reviewLength: hasReview ? reviewLength : "short",
+                  preview: commentPreview,
+                });
+              }
               notifiedUsers.add(mentionedUserId);
               console.log(`Mention notification sent to @${username} (${mentionedUserId})`);
             }
@@ -823,6 +893,94 @@ exports.onCommentLikeCreated = onDocumentCreated(
         likesCount: admin.firestore.FieldValue.increment(1),
       });
       console.log(`Incremented likesCount for comment ${event.params.commentId}`);
+
+      // Notify the comment owner (unless they liked their own comment)
+      const likeData = event.data.data();
+      const likerId = likeData.userId;
+      const likerName = likeData.username || "Someone";
+
+      const commentDoc = await commentRef.get();
+      if (!commentDoc.exists) return;
+      const commentData = commentDoc.data();
+      const commentOwnerId = commentData.userId;
+
+      if (commentOwnerId === likerId) {
+        console.log("User liked their own comment, skipping notification");
+        return;
+      }
+
+      const ratingRef = commentRef.parent.parent;
+      const ratingDoc = await ratingRef.get();
+      const ratingData = ratingDoc.exists ? ratingDoc.data() : {};
+      const commentPreview = commentData.content && commentData.content.length > 50
+        ? commentData.content.substring(0, 50) + "..."
+        : commentData.content || "";
+
+      await addMailboxNotification(commentOwnerId, {
+        type: "like",
+        actorId: likerId,
+        actorUsername: likerName,
+        ratingId: event.params.ratingId,
+        commentId: event.params.commentId,
+        spotifyId: ratingData.spotifyId || "",
+        itemType: ratingData.type || "",
+        itemName: ratingData.name || "",
+        artistName: ratingData.artistName || "",
+        imageURL: ratingData.imageURL || "",
+        hasReviewContent: !!(ratingData.reviewContent && ratingData.reviewContent.trim() !== ""),
+        preview: commentPreview,
+      });
+
+      const ownerDoc = await admin.firestore().collection("users").doc(commentOwnerId).get();
+      if (!ownerDoc.exists) return;
+      const fcmTokens = ownerDoc.data().fcmTokens || [];
+      if (fcmTokens.length === 0) {
+        console.log(`No FCM tokens for comment owner ${commentOwnerId}`);
+        return;
+      }
+
+      const notificationBody = `${likerName} liked your comment: "${commentPreview}"`;
+
+      const notifications = fcmTokens.map(async (token) => {
+        try {
+          await admin.messaging().send({
+            token,
+            notification: {
+              title: "New Like",
+              body: notificationBody,
+            },
+            data: {
+              type: "like",
+              ratingId: event.params.ratingId,
+              commentId: event.params.commentId,
+              spotifyId: ratingData.spotifyId || "",
+              itemType: ratingData.type || "",
+              itemName: ratingData.name || "",
+              artistName: ratingData.artistName || "",
+              imageURL: ratingData.imageURL || "",
+              hasReviewContent: ratingData.reviewContent && ratingData.reviewContent.trim() !== "" ? "true" : "false",
+              likerId: likerId,
+            },
+            apns: {
+              payload: {
+                aps: {
+                  sound: "default",
+                },
+              },
+            },
+          });
+        } catch (error) {
+          console.error(`Error sending comment like notification: ${error.message}`);
+          if (error.code === "messaging/invalid-registration-token" ||
+              error.code === "messaging/registration-token-not-registered") {
+            await admin.firestore().collection("users").doc(commentOwnerId).update({
+              fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
+            });
+          }
+        }
+      });
+      await Promise.all(notifications);
+      console.log(`Comment like notification sent to ${commentOwnerId}`);
     } catch (error) {
       console.error("Error incrementing comment likesCount:", error);
     }

@@ -728,3 +728,38 @@ enum BuddyFeedItem: Identifiable {
         }
     }
 }
+
+// MARK: - Mailbox Notification Model
+
+/// A persisted notification (mention, like, or reply) shown in the Mailbox tab.
+/// Written by Cloud Functions alongside the ephemeral push notification.
+struct AppNotification: Codable, Identifiable, Equatable {
+    var id: String
+    let type: NotificationKind
+    let actorId: String
+    let actorUsername: String?
+    let actorImageURL: String?
+    let createdAt: Date
+    var read: Bool
+    let ratingId: String?
+    let commentId: String?
+    let spotifyId: String?
+    let itemType: String?
+    let itemName: String?
+    let artistName: String?
+    let imageURL: String?
+    let hasReviewContent: Bool?
+    let reviewLength: String?
+    let preview: String?
+
+    enum NotificationKind: String, Codable {
+        case mention
+        case like
+        case reply
+    }
+
+    static func == (lhs: AppNotification, rhs: AppNotification) -> Bool {
+        lhs.id == rhs.id && lhs.read == rhs.read
+    }
+}
+

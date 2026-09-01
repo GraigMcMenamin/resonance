@@ -81,6 +81,8 @@ struct AuthenticatedView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var notificationManager: NotificationManager
+    @EnvironmentObject var buddyManager: BuddyManager
+    @EnvironmentObject var mailboxManager: MailboxManager
     @StateObject private var ratingsManager: RatingsManager
     @State private var selectedTab: Int = 0
     
@@ -101,23 +103,30 @@ struct AuthenticatedView: View {
                     }
                     .tag(0)
                 
+                MailboxView()
+                    .tabItem {
+                        Label("mailbox", systemImage: "tray.fill")
+                    }
+                    .tag(1)
+                    .badge(mailboxManager.unreadCount)
+                
                 HomeView()
                     .tabItem {
                         Label("charts", systemImage: "chart.bar.fill")
                     }
-                    .tag(1)
+                    .tag(2)
                 
                 SearchView()
                     .tabItem {
                         Label("search", systemImage: "magnifyingglass")
                     }
-                    .tag(2)
+                    .tag(3)
                 
                 ProfileView()
                     .tabItem {
                         Label("profile", systemImage: "person.fill")
                     }
-                    .tag(3)
+                    .tag(4)
             }
             .environmentObject(ratingsManager)
         }
@@ -139,6 +148,10 @@ struct AuthenticatedView: View {
             // Spotify ID = Firebase UID via custom token
             if !authManager.isGuestMode, let userId = authManager.currentUser?.id {
                 await ratingsManager.loadUserRatings(userId: userId)
+                buddyManager.initialize(firebaseService: firebaseService)
+                buddyManager.setUserId(userId)
+                mailboxManager.initialize(firebaseService: firebaseService)
+                mailboxManager.setUserId(userId)
             } else if authManager.isGuestMode {
                 // Clear ratings in guest mode
                 ratingsManager.clearUserRatings()
@@ -149,9 +162,13 @@ struct AuthenticatedView: View {
                 if let newUserId = newValue, !authManager.isGuestMode {
                     // User changed, load their ratings
                     await ratingsManager.loadUserRatings(userId: newUserId)
+                    buddyManager.setUserId(newUserId)
+                    mailboxManager.setUserId(newUserId)
                 } else {
                     // User logged out or switched to guest
                     ratingsManager.clearUserRatings()
+                    buddyManager.setUserId(nil)
+                    mailboxManager.setUserId(nil)
                 }
             }
         }
@@ -171,17 +188,20 @@ struct AuthenticatedView: View {
     private func applyDeepLink(_ deepLink: NotificationDeepLink) {
         switch deepLink {
         case .homePage:
-            selectedTab = 1
+            selectedTab = 2
             notificationManager.pendingDeepLink = nil
         case .buddyRatingFeed, .reviewsList:
             // Switch to the BuddyBoard tab; BuddyBoardView handles scroll/navigation and clears the link itself
             selectedTab = 0
         case .profilePage:
-            selectedTab = 3
+            selectedTab = 4
             notificationManager.pendingDeepLink = nil
         case .myRatings:
             // Switch to BuddyBoard tab; BuddyBoardView handles the section switch
             selectedTab = 0
+        case .mailbox:
+            selectedTab = 1
+            notificationManager.pendingDeepLink = nil
         }
     }
 }

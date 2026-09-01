@@ -24,6 +24,8 @@ enum NotificationDeepLink: Equatable {
     case profilePage
     /// Navigate to my ratings tab on the buddy board
     case myRatings
+    /// Navigate to the mailbox tab (for recommendation and buddy request notifications)
+    case mailbox
 }
 
 @MainActor
@@ -189,13 +191,13 @@ class NotificationManager: NSObject, ObservableObject {
     // MARK: - Tap Handlers
     
     private func handleRecommendationTap(_ userInfo: [AnyHashable: Any]) {
-        // Music sent to you → open on home page
-        pendingDeepLink = .homePage
+        // Music sent to you → open on the mailbox tab
+        pendingDeepLink = .mailbox
     }
     
     private func handleBuddyRequestTap(_ userInfo: [AnyHashable: Any]) {
-        // Buddy request → navigate to profile page to accept/reject
-        pendingDeepLink = .profilePage
+        // Buddy request → navigate to the mailbox tab to accept/reject
+        pendingDeepLink = .mailbox
     }
     
     private func handleBuddyRatingTap(_ userInfo: [AnyHashable: Any]) {
