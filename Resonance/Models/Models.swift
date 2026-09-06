@@ -489,6 +489,27 @@ struct ReviewComment: Codable, Identifiable, Equatable {
     }
 }
 
+// MARK: - Review Comment Sync Notifications
+
+/// Broadcasts comment add/delete so every view showing the same review (e.g. BuddyBoardView's
+/// inline card and the pushed ReviewsListView) stays in sync without needing an app restart.
+extension Notification.Name {
+    static let reviewCommentAdded = Notification.Name("reviewCommentAdded")
+    static let reviewCommentDeleted = Notification.Name("reviewCommentDeleted")
+}
+
+struct ReviewCommentAddedPayload {
+    let reviewId: String
+    let comment: ReviewComment
+    let sourceId: UUID
+}
+
+struct ReviewCommentDeletedPayload {
+    let reviewId: String
+    let commentId: String
+    let sourceId: UUID
+}
+
 // MARK: - Comment Like Model
 
 struct CommentLike: Codable, Identifiable, Equatable {

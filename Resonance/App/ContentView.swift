@@ -46,7 +46,10 @@ struct ContentView: View {
     
     var body: some View {
         Group {
-            if authManager.isGuestMode {
+            if authManager.isSessionRestoring {
+                // Avoid flashing the login screen while Firebase restores a persisted session
+                SplashView()
+            } else if authManager.isGuestMode {
                 // Guest mode - full access without saving
                 AuthenticatedView(firebaseService: firebaseService)
             } else if authManager.isAuthenticated {
@@ -202,6 +205,31 @@ struct AuthenticatedView: View {
         case .mailbox:
             selectedTab = 1
             notificationManager.pendingDeepLink = nil
+        }
+    }
+}
+
+// MARK: - Splash View
+
+/// Shown briefly on launch while Firebase restores a persisted session, to avoid flashing the login screen.
+struct SplashView: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.15, green: 0.08, blue: 0.18),
+                    Color(red: 0.1, green: 0.05, blue: 0.12)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            Image("AppLogo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 120, height: 120)
+                .cornerRadius(24)
         }
     }
 }

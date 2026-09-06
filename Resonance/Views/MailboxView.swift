@@ -45,7 +45,7 @@ struct MailboxView: View {
                 }
                 .padding(.vertical, 12)
             }
-            .background(Color(red: 0.15, green: 0.08, blue: 0.18).ignoresSafeArea())
+            .background(Color(.systemBackground).ignoresSafeArea())
             .refreshable {
                 await buddyManager.refresh()
                 await mailboxManager.refresh()
@@ -117,7 +117,7 @@ struct MailboxView: View {
             }
             .padding(.horizontal)
 
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 ForEach(buddyManager.pendingRequests) { request in
                     buddyRequestRow(request: request)
                 }
@@ -128,7 +128,7 @@ struct MailboxView: View {
 
     @ViewBuilder
     private func buddyRequestRow(request: BuddyRequest) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 if let imageURLString = request.fromImageURL, let imageURL = URL(string: imageURLString) {
                     AsyncImage(url: imageURL) { image in
@@ -165,18 +165,20 @@ struct MailboxView: View {
             }
 
             HStack(spacing: 12) {
+                Spacer()
+
                 Button(action: {
                     Task { await buddyManager.acceptRequest(request) }
                 }) {
-                    HStack {
+                    HStack(spacing: 4) {
                         Image(systemName: "checkmark")
                         Text("Yes")
                     }
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
                     .background(Color.green)
                     .cornerRadius(8)
                 }
@@ -184,22 +186,24 @@ struct MailboxView: View {
                 Button(action: {
                     Task { await buddyManager.rejectRequest(request) }
                 }) {
-                    HStack {
+                    HStack(spacing: 4) {
                         Image(systemName: "xmark")
                         Text("No")
                     }
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
                     .background(Color.red.opacity(0.7))
                     .cornerRadius(8)
                 }
+
+                Spacer()
             }
         }
-        .padding()
-        .background(Color.white.opacity(0.05))
+        .padding(12)
+        .background(Color(red: 0.6, green: 0.4, blue: 0.8).opacity(0.3))
         .cornerRadius(10)
     }
 
@@ -226,7 +230,7 @@ struct MailboxView: View {
             }
             .padding(.horizontal)
 
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 ForEach(mailboxManager.pendingRecommendations) { recommendation in
                     recommendationRow(recommendation)
                 }
@@ -237,7 +241,7 @@ struct MailboxView: View {
 
     @ViewBuilder
     private func recommendationRow(_ recommendation: MusicRecommendation) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 12) {
                 NavigationLink(destination: recommendationDestination(recommendation)) {
                     HStack(alignment: .top, spacing: 12) {
@@ -272,10 +276,6 @@ struct MailboxView: View {
                                     .foregroundColor(.white.opacity(0.6))
                                     .lineLimit(2)
                             }
-
-                            Text(recommendation.sentAt, style: .relative)
-                                .font(.caption2)
-                                .foregroundColor(.white.opacity(0.4))
                         }
                     }
                     .contentShape(Rectangle())
@@ -293,6 +293,8 @@ struct MailboxView: View {
             }
 
             HStack(spacing: 12) {
+                Spacer()
+
                 Button(action: {
                     selectedRatingItem = convertToRatableItem(recommendation)
                 }) {
@@ -300,8 +302,8 @@ struct MailboxView: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
                         .background(Color(red: 0.6, green: 0.4, blue: 0.8))
                         .cornerRadius(8)
                 }
@@ -313,15 +315,22 @@ struct MailboxView: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundColor(.white.opacity(0.6))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
                         .background(Color.white.opacity(0.1))
                         .cornerRadius(8)
                 }
+
+                Spacer()
+            }
+            .overlay(alignment: .trailing) {
+                Text(recommendation.sentAt, style: .relative)
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.4))
             }
         }
-        .padding()
-        .background(Color.white.opacity(0.05))
+        .padding(12)
+        .background(Color(red: 0.6, green: 0.4, blue: 0.8).opacity(0.3))
         .cornerRadius(10)
     }
 

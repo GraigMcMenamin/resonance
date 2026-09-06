@@ -861,6 +861,7 @@ struct LibraryBuddyRatingRow: View {
     @State private var showMentionSuggestions = false
     @State private var mentionSearchTask: Task<Void, Never>? = nil
     @State private var isReviewTruncated = false
+    @State private var sourceId = UUID()
     
     private let maxVisibleComments = 3
     
@@ -1143,6 +1144,24 @@ struct LibraryBuddyRatingRow: View {
                 showComments = true
                 showAllComments = true
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .reviewCommentAdded)) { note in
+            guard let payload = note.object as? ReviewCommentAddedPayload,
+                  payload.reviewId == rating.id,
+                  payload.sourceId != sourceId else { return }
+            if !comments.contains(where: { $0.id == payload.comment.id }) {
+                comments.append(payload.comment)
+                commentLikeCounts[payload.comment.id] = 0
+            }
+            commentsCount += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .reviewCommentDeleted)) { note in
+            guard let payload = note.object as? ReviewCommentDeletedPayload,
+                  payload.reviewId == rating.id,
+                  payload.sourceId != sourceId else { return }
+            comments.removeAll { $0.id == payload.commentId }
+            commentLikeCounts.removeValue(forKey: payload.commentId)
+            commentsCount = max(0, commentsCount - 1)
         }
     }
     
@@ -1439,6 +1458,10 @@ struct LibraryBuddyRatingRow: View {
                     replyingToComment = nil
                     isCommentFieldFocused = false
                     showComments = false
+                    NotificationCenter.default.post(
+                        name: .reviewCommentAdded,
+                        object: ReviewCommentAddedPayload(reviewId: rating.id, comment: comment, sourceId: sourceId)
+                    )
                 }
             } catch {
                 print("Error submitting comment: \(error)")
@@ -1499,6 +1522,10 @@ struct LibraryBuddyRatingRow: View {
                 comments.removeAll { $0.id == comment.id }
                 commentLikeCounts.removeValue(forKey: comment.id)
                 commentsCount = max(0, commentsCount - 1)
+                NotificationCenter.default.post(
+                    name: .reviewCommentDeleted,
+                    object: ReviewCommentDeletedPayload(reviewId: rating.id, commentId: comment.id, sourceId: sourceId)
+                )
             }
         } catch {
             print("Error deleting comment: \(error)")

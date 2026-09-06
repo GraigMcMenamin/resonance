@@ -18,6 +18,8 @@ class AuthenticationManager: NSObject, ObservableObject {
     @Published var isAuthenticated = false
     @Published var isGuestMode = false
     @Published var isLoading = false
+    // True until the initial Firebase auth-state check completes; lets the UI avoid flashing the login screen on launch.
+    @Published var isSessionRestoring = true
     @Published var errorMessage: String?
     @Published var phoneVerificationID: String?
     
@@ -68,6 +70,8 @@ class AuthenticationManager: NSObject, ObservableObject {
                     self.isAuthenticated = false
                     // Don't reset guest mode here
                 }
+
+                self.isSessionRestoring = false
             }
         }
     }
