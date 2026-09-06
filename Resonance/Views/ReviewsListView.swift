@@ -94,7 +94,6 @@ struct ReviewsListView: View {
                                     ReviewCard(
                                         review: review,
                                         initialLikesCount: reviewLikeCounts[review.id] ?? 0,
-                                        buddyIds: buddyIds,
                                         autoExpandComments: review.id == scrollToReviewId,
                                         scrollToCommentId: review.id == scrollToReviewId ? scrollToCommentId : nil,
                                         onDelete: {
@@ -239,7 +238,6 @@ struct ReviewsListView: View {
 struct ReviewCard: View {
     let review: Review
     let initialLikesCount: Int
-    let buddyIds: Set<String>
     var autoExpandComments: Bool = false
     var scrollToCommentId: String? = nil
     var onDelete: (() async -> Void)? = nil
@@ -323,10 +321,17 @@ struct ReviewCard: View {
             }
             
             if let content = review.content, !content.isEmpty {
-                Text(content)
-                    .font(.body)
-                    .foregroundColor(.white.opacity(0.9))
-                    .lineLimit(nil)
+                MentionText(content: content) { username in
+                    Task {
+                        if let user = try? await firebaseService.getUserByUsername(username) {
+                            await MainActor.run {
+                                onUserTap?(user.id)
+                            }
+                        }
+                    }
+                }
+                .font(.body)
+                .foregroundColor(.white.opacity(0.9))
             }
             
             if review.dateUpdated != nil {
@@ -541,82 +546,34 @@ struct ReviewCard: View {
                     .foregroundColor(.white.opacity(0.5))
                     .padding(.vertical, 8)
             } else {
-                // Show buddy comments auto-expanded (first 3), others require manual expand
-                let buddyCommentsList = sortedComments.filter { buddyIds.contains($0.userId) }
-                let otherCommentsList = sortedComments.filter { !buddyIds.contains($0.userId) }
-                let visibleBuddyComments = showAllComments ? buddyCommentsList : Array(buddyCommentsList.prefix(maxVisibleComments))
-                
-                if !visibleBuddyComments.isEmpty {
-                    ForEach(visibleBuddyComments) { comment in
-                        CommentRow(
-                            comment: comment,
-                            reviewId: review.id,
-                            initialLikesCount: commentLikeCounts[comment.id] ?? 0,
-                            onDelete: {
-                                await deleteComment(comment)
-                            },
-                            onReply: { replyComment in
-                                replyingToComment = replyComment
-                                showComments = true
-                            },
-                            onUserTap: onUserTap
-                        )
-                        .environmentObject(authManager)
-                        .environmentObject(firebaseService)
-                        .id(comment.id)
-                    }
-                    
-                    if buddyCommentsList.count > maxVisibleComments && !showAllComments {
-                        Button(action: { withAnimation { showAllComments = true } }) {
-                            Text("show \(buddyCommentsList.count - maxVisibleComments) more buddy comment\(buddyCommentsList.count - maxVisibleComments == 1 ? "" : "s")")
-                                .font(.caption)
-                                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
-                        }
-                        .padding(.top, 4)
-                    }
+                let visibleComments = showAllComments ? sortedComments : Array(sortedComments.prefix(maxVisibleComments))
+                ForEach(visibleComments) { comment in
+                    CommentRow(
+                        comment: comment,
+                        reviewId: review.id,
+                        initialLikesCount: commentLikeCounts[comment.id] ?? 0,
+                        onDelete: {
+                            await deleteComment(comment)
+                        },
+                        onReply: { replyComment in
+                            replyingToComment = replyComment
+                            showComments = true
+                        },
+                        onUserTap: onUserTap
+                    )
+                    .environmentObject(authManager)
+                    .environmentObject(firebaseService)
+                    .id(comment.id)
                 }
                 
-                if showComments && !otherCommentsList.isEmpty {
-                    let visibleOtherComments = showAllComments ? otherCommentsList : Array(otherCommentsList.prefix(maxVisibleComments))
-                    ForEach(visibleOtherComments) { comment in
-                        CommentRow(
-                            comment: comment,
-                            reviewId: review.id,
-                            initialLikesCount: commentLikeCounts[comment.id] ?? 0,
-                            onDelete: {
-                                await deleteComment(comment)
-                            },
-                            onReply: { replyComment in
-                                replyingToComment = replyComment
-                                showComments = true
-                            },
-                            onUserTap: onUserTap
-                        )
-                        .environmentObject(authManager)
-                        .environmentObject(firebaseService)
-                        .id(comment.id)
-                    }
-                    
-                    if otherCommentsList.count > maxVisibleComments && !showAllComments {
-                        Button(action: { withAnimation { showAllComments = true } }) {
-                            Text("show \(otherCommentsList.count - maxVisibleComments) more comment\(otherCommentsList.count - maxVisibleComments == 1 ? "" : "s")")
-                                .font(.caption)
-                                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
-                        }
-                        .padding(.top, 4)
-                    }
-                } else if !showComments && !otherCommentsList.isEmpty {
-                    Button(action: {
-                        withAnimation { showComments = true }
-                    }) {
-                        Text("show \(otherCommentsList.count) more comment\(otherCommentsList.count == 1 ? "" : "s")")
+                if sortedComments.count > maxVisibleComments && !showAllComments {
+                    Button(action: { withAnimation { showAllComments = true } }) {
+                        Text("show \(sortedComments.count - maxVisibleComments) more comment\(sortedComments.count - maxVisibleComments == 1 ? "" : "s")")
                             .font(.caption)
                             .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
                     }
                     .padding(.top, 4)
-                }
-                
-                if showAllComments {
+                } else if showAllComments && sortedComments.count > maxVisibleComments {
                     Button(action: { withAnimation { showAllComments = false } }) {
                         Text("show less")
                             .font(.caption)
@@ -629,17 +586,7 @@ struct ReviewCard: View {
     }
     
     private var sortedComments: [ReviewComment] {
-        let buddyComments = comments.filter { buddyIds.contains($0.userId) }
-        let otherComments = comments.filter { !buddyIds.contains($0.userId) }
-        
-        let sortedBuddyComments = buddyComments.sorted {
-            (commentLikeCounts[$0.id] ?? 0) > (commentLikeCounts[$1.id] ?? 0)
-        }
-        let sortedOtherComments = otherComments.sorted {
-            (commentLikeCounts[$0.id] ?? 0) > (commentLikeCounts[$1.id] ?? 0)
-        }
-        
-        return sortedBuddyComments + sortedOtherComments
+        comments.sorted { $0.createdAt > $1.createdAt }
     }
     
     private var formattedDate: String {

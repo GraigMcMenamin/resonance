@@ -592,14 +592,7 @@ struct StatsCard: View {
     }
     
     private var percentageColor: Color {
-        let avg = Double(averagePercentage)
-        switch avg {
-        case 0..<40: return .red
-        case 40..<60: return .orange
-        case 60..<75: return .yellow
-        case 75..<90: return Color(red: 0.6, green: 0.8, blue: 0.2) // yellow-green
-        default: return .green
-        }
+        colorForPercentage(Double(averagePercentage))
     }
     
     var body: some View {
@@ -638,14 +631,7 @@ struct RatingRow: View {
     var onReviewTapped: (() -> Void)? = nil
     
     private var percentageColor: Color {
-        let pct = Double(rating.percentage)
-        switch pct {
-        case 0..<40: return .red
-        case 40..<60: return .orange
-        case 60..<75: return .yellow
-        case 75..<90: return Color(red: 0.6, green: 0.8, blue: 0.2) // yellow-green
-        default: return .green
-        }
+        colorForPercentage(Double(rating.percentage))
     }
     
     var body: some View {
@@ -727,7 +713,7 @@ struct RatingRow: View {
                             .font(.caption)
                             .fontWeight(.medium)
                             .foregroundColor(.secondary)
-                        Text(content)
+                        MentionText(content: content)
                             .font(.subheadline)
                             .foregroundColor(.primary)
                             .lineLimit(3)
@@ -798,14 +784,7 @@ struct BuddyRatingsStatsCard: View {
     }
     
     private var percentageColor: Color {
-        let avg = Double(averagePercentage)
-        switch avg {
-        case 0..<40: return .red
-        case 40..<60: return .orange
-        case 60..<75: return .yellow
-        case 75..<90: return Color(red: 0.6, green: 0.8, blue: 0.2)
-        default: return .green
-        }
+        colorForPercentage(Double(averagePercentage))
     }
     
     var body: some View {
@@ -886,14 +865,7 @@ struct LibraryBuddyRatingRow: View {
     private let maxVisibleComments = 3
     
     private var percentageColor: Color {
-        let pct = Double(rating.percentage)
-        switch pct {
-        case 0..<40: return .red
-        case 40..<60: return .orange
-        case 60..<75: return .yellow
-        case 75..<90: return Color(red: 0.6, green: 0.8, blue: 0.2)
-        default: return .green
-        }
+        colorForPercentage(Double(rating.percentage))
     }
     
     private var itemTypeIcon: String {
@@ -902,10 +874,6 @@ struct LibraryBuddyRatingRow: View {
         case .album: return "square.stack"
         case .track: return "music.note"
         }
-    }
-    
-    private var buddyIds: Set<String> {
-        Set(buddyManager.buddies.map { $0.id })
     }
     
     private var reviewType: Review.ReviewType {
@@ -1067,7 +1035,7 @@ struct LibraryBuddyRatingRow: View {
                             .font(.caption)
                             .fontWeight(.medium)
                             .foregroundColor(.secondary)
-                        Text(content)
+                        MentionText(content: content)
                             .font(.subheadline)
                             .foregroundColor(.primary)
                             .lineLimit(4)
@@ -1376,17 +1344,7 @@ struct LibraryBuddyRatingRow: View {
     }
     
     private var sortedComments: [ReviewComment] {
-        let buddyComments = comments.filter { buddyIds.contains($0.userId) }
-        let otherComments = comments.filter { !buddyIds.contains($0.userId) }
-        
-        let sortedBuddyComments = buddyComments.sorted {
-            (commentLikeCounts[$0.id] ?? 0) > (commentLikeCounts[$1.id] ?? 0)
-        }
-        let sortedOtherComments = otherComments.sorted {
-            (commentLikeCounts[$0.id] ?? 0) > (commentLikeCounts[$1.id] ?? 0)
-        }
-        
-        return sortedBuddyComments + sortedOtherComments
+        comments.sorted { $0.createdAt > $1.createdAt }
     }
     
     private func loadInteractions() async {
@@ -1563,14 +1521,7 @@ struct RecommendationFeedRow: View {
     
     private var percentageColor: Color {
         guard let rating = receiverRating else { return .gray }
-        let pct = Double(rating.percentage)
-        switch pct {
-        case 0..<40: return .red
-        case 40..<60: return .orange
-        case 60..<75: return .yellow
-        case 75..<90: return Color(red: 0.6, green: 0.8, blue: 0.2)
-        default: return .green
-        }
+        return colorForPercentage(Double(rating.percentage))
     }
     
     private var itemTypeIcon: String {
@@ -1723,7 +1674,7 @@ struct RecommendationFeedRow: View {
                         Text("\(receiverName)'s \(rating.type == .artist ? "artist" : rating.type == .album ? "album" : "song") review:")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        Text(content)
+                        MentionText(content: content)
                             .font(.subheadline)
                             .foregroundColor(.primary)
                             .lineLimit(3)

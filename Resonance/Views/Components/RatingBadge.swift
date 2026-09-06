@@ -445,7 +445,7 @@ struct BuddyRatingRow: View {
     
     private func reviewTextContent(_ content: String) -> some View {
         HStack(spacing: 6) {
-            Text(content)
+            MentionText(content: content)
                 .font(.footnote)
                 .foregroundColor(.white.opacity(0.8))
                 .lineLimit(4)

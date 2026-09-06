@@ -16,7 +16,6 @@ struct MailboxView: View {
     @EnvironmentObject var mailboxManager: MailboxManager
 
     @State private var selectedRatingItem: RatableItem?
-    @State private var showIgnoreConfirmation: MusicRecommendation?
 
     private var isEmpty: Bool {
         buddyManager.pendingRequests.isEmpty &&
@@ -58,21 +57,6 @@ struct MailboxView: View {
             RatingSheet(item: item, ratingsManager: ratingsManager)
                 .environmentObject(authManager)
                 .environmentObject(firebaseService)
-        }
-        .confirmationDialog(
-            "Ignore Recommendation",
-            isPresented: .init(
-                get: { showIgnoreConfirmation != nil },
-                set: { if !$0 { showIgnoreConfirmation = nil } }
-            ),
-            presenting: showIgnoreConfirmation
-        ) { recommendation in
-            Button("Ignore", role: .destructive) {
-                Task { await mailboxManager.ignoreRecommendation(recommendation) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("This won't delete the recommendation, but it will remove it from your pending list.")
         }
         .onAppear {
             mailboxManager.initialize(firebaseService: firebaseService)
@@ -242,20 +226,130 @@ struct MailboxView: View {
             }
             .padding(.horizontal)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(mailboxManager.pendingRecommendations) { recommendation in
-                        PendingRecommendationCard(
-                            recommendation: recommendation,
-                            onTap: {
-                                selectedRatingItem = convertToRatableItem(recommendation)
-                            },
-                            onIgnore: { showIgnoreConfirmation = recommendation }
-                        )
-                    }
+            VStack(spacing: 12) {
+                ForEach(mailboxManager.pendingRecommendations) { recommendation in
+                    recommendationRow(recommendation)
                 }
-                .padding(.horizontal)
             }
+            .padding(.horizontal)
+        }
+    }
+
+    @ViewBuilder
+    private func recommendationRow(_ recommendation: MusicRecommendation) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                NavigationLink(destination: recommendationDestination(recommendation)) {
+                    HStack(alignment: .top, spacing: 12) {
+                        if let imageURLString = recommendation.imageURL, let imageURL = URL(string: imageURLString) {
+                            AsyncImage(url: imageURL) { image in
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Circle().fill(Color.white.opacity(0.1))
+                            }
+                            .frame(width: 44, height: 44)
+                            .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                        } else {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.1))
+                                    .frame(width: 44, height: 44)
+                                Image(systemName: "music.note")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(recommendationText(recommendation))
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            if let message = recommendation.message, !message.isEmpty {
+                                Text("\"\(message)\"")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .lineLimit(2)
+                            }
+
+                            Text(recommendation.sentAt, style: .relative)
+                                .font(.caption2)
+                                .foregroundColor(.white.opacity(0.4))
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 0)
+
+                Button(action: { openInSpotify(recommendation) }) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.green)
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 12) {
+                Button(action: {
+                    selectedRatingItem = convertToRatableItem(recommendation)
+                }) {
+                    Text("Review")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color(red: 0.6, green: 0.4, blue: 0.8))
+                        .cornerRadius(8)
+                }
+
+                Button(action: {
+                    Task { await mailboxManager.ignoreRecommendation(recommendation) }
+                }) {
+                    Text("Ignore")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white.opacity(0.6))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(8)
+                }
+            }
+        }
+        .padding()
+        .background(Color.white.opacity(0.05))
+        .cornerRadius(10)
+    }
+
+    @ViewBuilder
+    private func recommendationDestination(_ recommendation: MusicRecommendation) -> some View {
+        switch recommendation.itemType {
+        case .artist:
+            ArtistDetailView(
+                artistId: recommendation.spotifyId,
+                artistName: recommendation.itemName,
+                artistImageURL: recommendation.imageURL.flatMap { URL(string: $0) }
+            )
+        case .album:
+            AlbumDetailView(
+                albumId: recommendation.spotifyId,
+                albumName: recommendation.itemName,
+                artistName: recommendation.artistName ?? "",
+                imageURL: recommendation.imageURL.flatMap { URL(string: $0) }
+            )
+        case .track:
+            SongDetailView(
+                trackId: recommendation.spotifyId,
+                trackName: recommendation.itemName,
+                artistName: recommendation.artistName ?? "",
+                albumName: nil,
+                albumId: nil,
+                imageURL: recommendation.imageURL.flatMap { URL(string: $0) }
+            )
         }
     }
 
@@ -309,6 +403,37 @@ struct MailboxView: View {
                 popularity: nil
             )
             return .track(track)
+        }
+    }
+
+    private func recommendationText(_ recommendation: MusicRecommendation) -> String {
+        let sender = recommendation.senderUsername.map { "@\($0)" } ?? "Someone"
+        let typeLabel: String
+        switch recommendation.itemType {
+        case .artist: typeLabel = "artist"
+        case .album: typeLabel = "album"
+        case .track: typeLabel = "song"
+        }
+
+        if recommendation.itemType != .artist, let artistName = recommendation.artistName {
+            return "\(sender) sent you the \(typeLabel) \"\(recommendation.itemName)\" by \(artistName)"
+        }
+        return "\(sender) sent you the \(typeLabel) \"\(recommendation.itemName)\""
+    }
+
+    private func openInSpotify(_ recommendation: MusicRecommendation) {
+        let typeString: String
+        switch recommendation.itemType {
+        case .artist: typeString = "artist"
+        case .album: typeString = "album"
+        case .track: typeString = "track"
+        }
+
+        if let uri = SpotifyService.spotifyURI(type: typeString, id: recommendation.spotifyId),
+           UIApplication.shared.canOpenURL(uri) {
+            UIApplication.shared.open(uri)
+        } else if let webURL = SpotifyService.spotifyWebURL(type: typeString, id: recommendation.spotifyId) {
+            UIApplication.shared.open(webURL)
         }
     }
 
@@ -392,6 +517,7 @@ struct MailboxView: View {
         case .mention: return "at"
         case .reply: return "arrowshape.turn.up.left.fill"
         case .like: return "heart.fill"
+        case .comment: return "bubble.right.fill"
         }
     }
 
@@ -400,6 +526,7 @@ struct MailboxView: View {
         case .mention: return .blue
         case .reply: return Color(red: 0.6, green: 0.4, blue: 0.8)
         case .like: return .red
+        case .comment: return Color(red: 0.6, green: 0.4, blue: 0.8)
         }
     }
 
@@ -408,10 +535,11 @@ struct MailboxView: View {
 
         switch notification.type {
         case .mention:
+            let context = notification.commentId != nil ? "comment" : ((notification.hasReviewContent ?? false) ? "review" : "rating")
             if let itemName = notification.itemName {
-                return "\(actor) mentioned you in a comment on \(itemName)"
+                return "\(actor) mentioned you in a \(context) on \(itemName)"
             }
-            return "\(actor) mentioned you in a comment"
+            return "\(actor) mentioned you in a \(context)"
 
         case .reply:
             if let preview = notification.preview, !preview.isEmpty {
@@ -428,6 +556,16 @@ struct MailboxView: View {
                 return "\(actor) liked your \(label) of \(itemName)"
             }
             return "\(actor) liked your \(label)"
+
+        case .comment:
+            let label = (notification.hasReviewContent ?? false) ? "review" : "rating"
+            if let preview = notification.preview, !preview.isEmpty {
+                return "\(actor) commented on your \(label): \"\(preview)\""
+            }
+            if let itemName = notification.itemName {
+                return "\(actor) commented on your \(label) of \(itemName)"
+            }
+            return "\(actor) commented on your \(label)"
         }
     }
 
@@ -448,148 +586,6 @@ struct MailboxView: View {
         userInfo["commenterId"] = notification.actorId
 
         notificationManager.handleNotificationTap(userInfo)
-    }
-}
-
-// MARK: - Pending Recommendation Card
-
-struct PendingRecommendationCard: View {
-    let recommendation: MusicRecommendation
-    let onTap: () -> Void
-    let onIgnore: () -> Void
-
-    @ViewBuilder
-    private var destinationView: some View {
-        switch recommendation.itemType {
-        case .artist:
-            ArtistDetailView(
-                artistId: recommendation.spotifyId,
-                artistName: recommendation.itemName,
-                artistImageURL: recommendation.imageURL.flatMap { URL(string: $0) }
-            )
-        case .album:
-            AlbumDetailView(
-                albumId: recommendation.spotifyId,
-                albumName: recommendation.itemName,
-                artistName: recommendation.artistName ?? "",
-                imageURL: recommendation.imageURL.flatMap { URL(string: $0) }
-            )
-        case .track:
-            SongDetailView(
-                trackId: recommendation.spotifyId,
-                trackName: recommendation.itemName,
-                artistName: recommendation.artistName ?? "",
-                albumName: nil,
-                albumId: nil,
-                imageURL: recommendation.imageURL.flatMap { URL(string: $0) }
-            )
-        }
-    }
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            NavigationLink(destination: destinationView) {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 12) {
-                        if let imageURL = recommendation.imageURL, let url = URL(string: imageURL) {
-                            AsyncImage(url: url) { image in
-                                image.resizable().aspectRatio(contentMode: .fill)
-                            } placeholder: {
-                                RoundedRectangle(cornerRadius: 6).fill(Color.gray.opacity(0.3))
-                            }
-                            .frame(width: 60, height: 60)
-                            .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
-                        }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(recommendation.itemName)
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
-                                .lineLimit(2)
-
-                            if let artistName = recommendation.artistName {
-                                Text(artistName)
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .lineLimit(1)
-                            }
-
-                            Text("from @\(recommendation.senderUsername ?? "unknown")")
-                                .font(.caption2)
-                                .foregroundColor(.white.opacity(0.7))
-                        }
-
-                        Spacer()
-                    }
-                    .frame(height: 70)
-                    .padding(.bottom, 8)
-
-                    Text(recommendation.message ?? " ")
-                        .font(.caption)
-                        .foregroundColor(recommendation.message != nil && !recommendation.message!.isEmpty ? .white.opacity(0.8) : .clear)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(height: 34)
-
-                    Spacer()
-
-                    HStack(spacing: 8) {
-                        Button(action: onTap) {
-                            Text("Review")
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(Color(red: 0.6, green: 0.4, blue: 0.8))
-                                .cornerRadius(8)
-                        }
-                        .buttonStyle(.plain)
-
-                        Button(action: onIgnore) {
-                            Text("Ignore")
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white.opacity(0.6))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding()
-            }
-            .buttonStyle(.plain)
-
-            Button(action: {
-                let typeString: String
-                switch recommendation.itemType {
-                case .artist: typeString = "artist"
-                case .album: typeString = "album"
-                case .track: typeString = "track"
-                }
-
-                if let uri = SpotifyService.spotifyURI(type: typeString, id: recommendation.spotifyId),
-                   UIApplication.shared.canOpenURL(uri) {
-                    UIApplication.shared.open(uri)
-                } else if let webURL = SpotifyService.spotifyWebURL(type: typeString, id: recommendation.spotifyId) {
-                    UIApplication.shared.open(webURL)
-                }
-            }) {
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundColor(.green)
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 36)
-            .padding(.trailing, 10)
-        }
-        .frame(width: 290, height: 200)
-        .background(Color.white.opacity(0.1))
-        .cornerRadius(12)
     }
 }
 

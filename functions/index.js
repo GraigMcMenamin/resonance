@@ -372,6 +372,94 @@ exports.onRatingCreated = onDocumentWritten(
     console.log(`${userDisplayName} ${action}: ${itemName} (${percentage}%)`);
 
     try {
+      // Notify @mentioned users in the review text (independent of buddy notifications below)
+      if (hasReview) {
+        const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+        const mentionedUsernames = [];
+        let mentionMatch;
+        while ((mentionMatch = mentionRegex.exec(reviewContent)) !== null) {
+          const mentionedUsername = mentionMatch[1].toLowerCase();
+          if (!mentionedUsernames.includes(mentionedUsername)) {
+            mentionedUsernames.push(mentionedUsername);
+          }
+        }
+
+        const reviewPreview = reviewContent.length > 50
+          ? reviewContent.substring(0, 50) + "..."
+          : reviewContent;
+        const reviewLength = reviewContent.length >= 150 ? "long" : "short";
+
+        for (const mentionedUsername of mentionedUsernames) {
+          try {
+            const userQuery = await admin.firestore()
+              .collection("users")
+              .where("usernameLowercase", "==", mentionedUsername)
+              .limit(1)
+              .get();
+            if (userQuery.empty) continue;
+
+            const mentionedUserDoc = userQuery.docs[0];
+            const mentionedUserId = mentionedUserDoc.id;
+            if (mentionedUserId === userId) continue; // Never notify self
+
+            const fcmTokens = mentionedUserDoc.data().fcmTokens || [];
+            await Promise.all(fcmTokens.map(async (token) => {
+              try {
+                await admin.messaging().send({
+                  token,
+                  notification: {
+                    title: "You were mentioned",
+                    body: `${userDisplayName} mentioned you in a review of ${itemName}: "${reviewPreview}"`,
+                  },
+                  data: {
+                    type: "mention",
+                    ratingId: event.params.ratingId,
+                    spotifyId: rating.spotifyId || "",
+                    itemType: itemType || "",
+                    itemName: itemName || "",
+                    artistName: artistName || "",
+                    imageURL: rating.imageURL || "",
+                    hasReviewContent: "true",
+                    reviewLength: reviewLength,
+                    commenterId: userId,
+                  },
+                  apns: { payload: { aps: { sound: "default" } } },
+                });
+              } catch (error) {
+                console.error(`Failed to send mention notification to token: ${error.message}`);
+                if (
+                  error.code === "messaging/invalid-registration-token" ||
+                  error.code === "messaging/registration-token-not-registered"
+                ) {
+                  await admin.firestore().collection("users").doc(mentionedUserId).update({
+                    fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
+                  });
+                }
+              }
+            }));
+
+            await addMailboxNotification(mentionedUserId, {
+              type: "mention",
+              actorId: userId,
+              actorUsername: userDisplayName,
+              ratingId: event.params.ratingId,
+              spotifyId: rating.spotifyId || "",
+              itemType: itemType || "",
+              itemName: itemName || "",
+              artistName: artistName || "",
+              imageURL: rating.imageURL || "",
+              hasReviewContent: true,
+              reviewLength: reviewLength,
+              preview: reviewPreview,
+            });
+
+            console.log(`Mention notification sent to @${mentionedUsername} (${mentionedUserId}) for review`);
+          } catch (err) {
+            console.error(`Error sending mention notification for @${mentionedUsername}:`, err);
+          }
+        }
+      }
+
       // Get the user's buddies from their subcollection
       const buddiesSnapshot = await admin.firestore()
         .collection("users")
@@ -746,6 +834,21 @@ exports.onReviewCommentCreated = onDocumentCreated(
           },
           { type: "comment", ...baseData }
         );
+        await addMailboxNotification(ratingOwnerId, {
+          type: "comment",
+          actorId: commenterId,
+          actorUsername: commenterName,
+          ratingId: event.params.ratingId,
+          commentId: event.params.commentId,
+          spotifyId: ratingData.spotifyId || "",
+          itemType: ratingData.type || "",
+          itemName: ratingData.name || "",
+          artistName: ratingData.artistName || "",
+          imageURL: ratingData.imageURL || "",
+          hasReviewContent: hasReview,
+          reviewLength: hasReview ? reviewLength : "short",
+          preview: commentPreview,
+        });
         notifiedUsers.add(ratingOwnerId);
         console.log(`Comment notification sent to rating owner ${ratingOwnerId}`);
       }
