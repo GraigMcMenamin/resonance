@@ -87,10 +87,12 @@ struct AuthenticatedView: View {
     @EnvironmentObject var buddyManager: BuddyManager
     @EnvironmentObject var mailboxManager: MailboxManager
     @StateObject private var ratingsManager: RatingsManager
+    @StateObject private var rankingsManager: RankingsManager
     @State private var selectedTab: Int = 0
     
     init(firebaseService: FirebaseService) {
         _ratingsManager = StateObject(wrappedValue: RatingsManager(firebaseService: firebaseService))
+        _rankingsManager = StateObject(wrappedValue: RankingsManager(firebaseService: firebaseService))
     }
     
     var body: some View {
@@ -132,6 +134,7 @@ struct AuthenticatedView: View {
                     .tag(4)
             }
             .environmentObject(ratingsManager)
+            .environmentObject(rankingsManager)
         }
         .onChange(of: notificationManager.pendingDeepLink) { deepLink in
             guard let deepLink = deepLink else { return }

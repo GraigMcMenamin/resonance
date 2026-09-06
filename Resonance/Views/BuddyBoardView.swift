@@ -9,6 +9,7 @@ import SwiftUI
 
 struct BuddyBoardView: View {
     @EnvironmentObject var ratingsManager: RatingsManager
+    @EnvironmentObject var rankingsManager: RankingsManager
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var buddyManager: BuddyManager
@@ -17,6 +18,7 @@ struct BuddyBoardView: View {
     @State private var selectedSection: LibrarySection = .buddyReviews
     @State private var buddyRatings: [UserRating] = []
     @State private var buddyRecommendations: [MusicRecommendation] = []
+    @State private var buddyRankings: [UserRanking] = []
     @State private var buddyFeedItems: [BuddyFeedItem] = []
     @State private var isLoadingBuddyRatings = false
     @State private var deepLinkScrollToId: String? = nil
@@ -30,6 +32,8 @@ struct BuddyBoardView: View {
     @State private var myRatingsAnchorId: String? = nil
     @State private var reviewNavRating: UserRating? = nil
     @State private var musicNavRating: UserRating? = nil
+    @State private var rankingNav: UserRanking? = nil
+    @State private var showCreateRanking = false
     
     var body: some View {
         NavigationView {
@@ -71,11 +75,26 @@ struct BuddyBoardView: View {
                 }
                 .hidden()
                 .frame(width: 0, height: 0)
+
+                // Hidden NavigationLink for ranking detail navigation
+                NavigationLink(
+                    destination: Group {
+                        if let ranking = rankingNav { RankingDetailView(ranking: ranking) }
+                    },
+                    isActive: Binding(
+                        get: { rankingNav != nil },
+                        set: { if !$0 { rankingNav = nil } }
+                    )
+                ) {
+                    EmptyView()
+                }
+                .hidden()
+                .frame(width: 0, height: 0)
                 
-                // Section Picker (My Ratings vs Buddy Ratings)
+                // Section Picker (My Board vs Buddy Board)
                 Picker("Section", selection: $selectedSection) {
                     Text("buddy board").tag(LibrarySection.buddyReviews)
-                    Text("my ratings").tag(LibrarySection.myRatings)
+                    Text("my board").tag(LibrarySection.myRatings)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
@@ -89,6 +108,18 @@ struct BuddyBoardView: View {
             }
             .navigationTitle(selectedSection == .myRatings ? "my board" : "buddy board")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if selectedSection == .myRatings {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: { showCreateRanking = true }) {
+                            Label("ranking", systemImage: "plus.circle")
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showCreateRanking) {
+                CreateRankingView(rankingsManager: rankingsManager)
+            }
             .onChange(of: selectedSection) { newValue in
                 if newValue == .buddyReviews && !hasBuddyFeedLoaded {
                     Task {
@@ -113,6 +144,16 @@ struct BuddyBoardView: View {
                     buddyRatings = ratingsManager.allRatings
                         .filter { buddyIdSet.contains($0.userId) || $0.userId == currentUserId }
                         .sorted { $0.dateRated > $1.dateRated }
+                    buildBuddyFeed()
+                }
+            }
+            .onChange(of: rankingsManager.allRankings) { _ in
+                // Silently rebuild feed when rankings update (no loading indicator = no scroll reset)
+                if hasBuddyFeedLoaded {
+                    let buddyIdSet = Set(buddyManager.buddies.map { $0.id })
+                    let currentUserId = authManager.currentUser?.id ?? ""
+                    buddyRankings = rankingsManager.allRankings
+                        .filter { buddyIdSet.contains($0.userId) || $0.userId == currentUserId }
                     buildBuddyFeed()
                 }
             }
@@ -225,7 +266,7 @@ struct BuddyBoardView: View {
         }
     }
     
-    // MARK: - My Ratings Section
+    // MARK: - My Board Section
     
     private var myRatingsSection: some View {
         VStack(spacing: 0) {
@@ -235,6 +276,7 @@ struct BuddyBoardView: View {
                 Text("songs").tag(RatingFilter.songs)
                 Text("artists").tag(RatingFilter.artists)
                 Text("albums").tag(RatingFilter.albums)
+                Text("rankings").tag(RatingFilter.rankings)
             }
             .pickerStyle(.segmented)
             .padding()
@@ -243,15 +285,15 @@ struct BuddyBoardView: View {
             ScrollViewReader { proxy in
                 // Always use a List so pull-to-refresh works in all states
                 List {
-                    if filteredRatings.isEmpty {
+                    if myBoardItems.isEmpty {
                         VStack(spacing: 12) {
                             Image(systemName: "star.slash")
                                 .font(.system(size: 60))
                                 .foregroundColor(.gray)
-                            Text("no ratings yet")
+                            Text(selectedFilter == .rankings ? "no rankings yet" : "no ratings yet")
                                 .font(.headline)
                                 .foregroundColor(.secondary)
-                            Text("search and rate your favorite music")
+                            Text(selectedFilter == .rankings ? "create a ranking to see it here" : "search and rate your favorite music")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
@@ -260,23 +302,29 @@ struct BuddyBoardView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     } else {
-                        ForEach(filteredRatings) { rating in
-                            RatingRow(rating: rating, onReviewTapped: rating.hasReviewContent ? { reviewNavRating = rating } : nil)
-                                .id(rating.id)
+                        ForEach(myBoardItems) { item in
+                            myBoardRow(for: item)
+                                .id(item.id)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
-                                    myRatingsAnchorId = rating.id
-                                    musicNavRating = rating
+                                    myRatingsAnchorId = item.id
+                                    switch item {
+                                    case .rating(let rating):
+                                        musicNavRating = rating
+                                    case .ranking(let ranking):
+                                        rankingNav = ranking
+                                    case .recommendation:
+                                        break
+                                    }
                                 }
-                                .onAppear {
-                                    if rating.id == filteredRatings.last?.id,
-                                       ratingsManager.hasMoreRatings,
-                                       let userId = authManager.currentUser?.id {
-                                        Task { await ratingsManager.loadMoreUserRatings(userId: userId) }
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        Task { await deleteMyBoardItem(item) }
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
                                     }
                                 }
                         }
-                        .onDelete(perform: deleteRatings)
 
                         if ratingsManager.isLoading && !ratingsManager.ratings.isEmpty {
                             HStack {
@@ -306,6 +354,25 @@ struct BuddyBoardView: View {
                     }
                 }
             }
+        }
+    }
+    
+    @ViewBuilder
+    private func myBoardRow(for item: BuddyFeedItem) -> some View {
+        switch item {
+        case .rating(let rating):
+            RatingRow(rating: rating, onReviewTapped: rating.hasReviewContent ? { reviewNavRating = rating } : nil)
+                .onAppear {
+                    if rating.id == ratingsForMyBoard.last?.id,
+                       ratingsManager.hasMoreRatings,
+                       let userId = authManager.currentUser?.id {
+                        Task { await ratingsManager.loadMoreUserRatings(userId: userId) }
+                    }
+                }
+        case .ranking(let ranking):
+            RankingRow(ranking: ranking)
+        case .recommendation:
+            EmptyView()
         }
     }
     
@@ -357,7 +424,12 @@ struct BuddyBoardView: View {
                                     receiverRating: receiverRating,
                                     currentUserId: authManager.currentUser?.id
                                 )
+                                .listRowInsets(EdgeInsets())
                                 .id(item.id)
+                            case .ranking(let ranking):
+                                RankingFeedRow(ranking: ranking)
+                                    .listRowInsets(EdgeInsets())
+                                    .id(item.id)
                             }
                         }
                     }
@@ -422,6 +494,9 @@ struct BuddyBoardView: View {
         
         print("Found \(buddyRatings.count) buddy ratings")
         
+        buddyRankings = rankingsManager.allRankings
+            .filter { buddyIdSet.contains($0.userId) || $0.userId == currentUserId }
+        
         // Also load recommendations (only if there are buddies)
         if !buddyIds.isEmpty {
             do {
@@ -462,6 +537,11 @@ struct BuddyBoardView: View {
         // Add ratings as feed items
         for rating in buddyRatings {
             feedItems.append(.rating(rating))
+        }
+        
+        // Add rankings as feed items
+        for ranking in buddyRankings {
+            feedItems.append(.ranking(ranking))
         }
         
         // Add recommendations as feed items
@@ -557,7 +637,7 @@ struct BuddyBoardView: View {
         }
     }
 
-    private var filteredRatings: [UserRating] {
+    private var ratingsForMyBoard: [UserRating] {
         switch selectedFilter {
         case .all:
             return ratingsManager.allRatingsSorted
@@ -567,15 +647,38 @@ struct BuddyBoardView: View {
             return ratingsManager.getRatings(ofType: .album)
         case .songs:
             return ratingsManager.getRatings(ofType: .track)
+        case .rankings:
+            return []
         }
     }
     
-    private func deleteRatings(at offsets: IndexSet) {
-        Task {
-            for index in offsets {
-                let rating = filteredRatings[index]
-                await ratingsManager.deleteRating(id: rating.id)
-            }
+    private var rankingsForMyBoard: [UserRanking] {
+        guard let userId = authManager.currentUser?.id else { return [] }
+        let mine = rankingsManager.rankings(forUserId: userId)
+        switch selectedFilter {
+        case .all, .rankings:
+            return mine
+        case .artists, .albums, .songs:
+            return []
+        }
+    }
+    
+    /// Ratings and rankings merged into a single, date-sorted feed so they display
+    /// the same way instead of being grouped into separate sections.
+    private var myBoardItems: [BuddyFeedItem] {
+        var items: [BuddyFeedItem] = ratingsForMyBoard.map { .rating($0) }
+        items += rankingsForMyBoard.map { .ranking($0) }
+        return items.sorted { $0.date > $1.date }
+    }
+    
+    private func deleteMyBoardItem(_ item: BuddyFeedItem) async {
+        switch item {
+        case .rating(let rating):
+            await ratingsManager.deleteRating(id: rating.id)
+        case .ranking(let ranking):
+            await rankingsManager.deleteRanking(id: ranking.id)
+        case .recommendation:
+            break
         }
     }
 }
@@ -759,6 +862,7 @@ enum RatingFilter {
     case artists
     case albums
     case songs
+    case rankings
 }
 
 // MARK: - Library Section Enum
@@ -1626,8 +1730,7 @@ struct RecommendationFeedRow: View {
             
             // Music item - tappable
             Button(action: { navigateToMusic = true }) {
-                HStack(spacing: 12) {
-                    // Item image
+                HStack(spacing: 12) {                    // Item image
                     if let imageURLString = recommendation.imageURL, let url = URL(string: imageURLString) {
                         CustomAsyncImage(url: url) { phase in
                             switch phase {
@@ -1693,6 +1796,8 @@ struct RecommendationFeedRow: View {
                 }
             }
             .buttonStyle(.plain)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
             
             // Show receiver's review if they rated it
             if let rating = receiverRating, rating.hasReviewContent, let content = rating.reviewContent {
@@ -1709,15 +1814,19 @@ struct RecommendationFeedRow: View {
                 }
                 .padding(.top, 4)
             }
-        }
-        .padding(.vertical, 8)
-        .background(
-            Group {
+            
+            // Grouped into a single zero-size container so it only contributes one
+            // layout gap, and so List doesn't add its own disclosure chevron.
+            ZStack {
                 NavigationLink(destination: BuddyProfileDestination(userId: recommendation.senderId), isActive: $navigateToSenderProfile) { EmptyView() }
                 NavigationLink(destination: BuddyProfileDestination(userId: recommendation.receiverId), isActive: $navigateToReceiverProfile) { EmptyView() }
                 NavigationLink(destination: musicDestination, isActive: $navigateToMusic) { EmptyView() }
             }
-        )
+            .hidden()
+            .frame(width: 0, height: 0)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal)
     }
     
     @ViewBuilder
@@ -1757,15 +1866,15 @@ struct RecommendationFeedRow: View {
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fill)
-                        .frame(width: 24, height: 24)
+                        .frame(width: 32, height: 32)
                         .clipShape(Circle())
                 default:
                     Circle()
                         .fill(Color.gray.opacity(0.3))
-                        .frame(width: 24, height: 24)
+                        .frame(width: 32, height: 32)
                         .overlay(
                             Image(systemName: "person.fill")
-                                .font(.system(size: 11))
+                                .font(.system(size: 14))
                                 .foregroundColor(.gray)
                         )
                 }
@@ -1773,10 +1882,10 @@ struct RecommendationFeedRow: View {
         } else {
             Circle()
                 .fill(Color.gray.opacity(0.3))
-                .frame(width: 24, height: 24)
+                .frame(width: 32, height: 32)
                 .overlay(
                     Image(systemName: "person.fill")
-                        .font(.system(size: 11))
+                        .font(.system(size: 14))
                         .foregroundColor(.gray)
                 )
         }
@@ -1787,6 +1896,7 @@ struct RecommendationFeedRow: View {
     let firebaseService = FirebaseService()
     BuddyBoardView()
         .environmentObject(RatingsManager(firebaseService: firebaseService))
+        .environmentObject(RankingsManager(firebaseService: firebaseService))
         .environmentObject(firebaseService)
         .environmentObject(AuthenticationManager())
         .environmentObject(BuddyManager())

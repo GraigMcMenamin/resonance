@@ -73,6 +73,15 @@ service cloud.firestore {
       }
     }
     
+    // Rankings collection - users can read all rankings, but only create/update/delete their own
+    match /rankings/{rankingId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                      request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && 
+                               resource.data.userId == request.auth.uid;
+    }
+    
     // Reviews collection - anyone can read reviews, but only owner can write their own
     match /reviews/{reviewId} {
       allow read: if isAuthenticated();

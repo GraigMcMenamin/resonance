@@ -10,11 +10,13 @@ import Combine
 
 struct OtherUserReviewsView: View {
     @EnvironmentObject var firebaseService: FirebaseService
+    @EnvironmentObject var rankingsManager: RankingsManager
     @StateObject private var viewModel = OtherUserReviewsViewModel()
     @State private var selectedFilter: RatingFilter = .all
     @State private var anchorId: String? = nil
     @State private var reviewNavRating: UserRating? = nil
     @State private var musicNavRating: UserRating? = nil
+    @State private var rankingNav: UserRanking? = nil
 
     let user: AppUser
 
@@ -28,7 +30,26 @@ struct OtherUserReviewsView: View {
             return viewModel.ratings.filter { $0.type == .album }
         case .songs:
             return viewModel.ratings.filter { $0.type == .track }
+        case .rankings:
+            return []
         }
+    }
+    
+    private var filteredRankings: [UserRanking] {
+        let theirs = rankingsManager.rankings(forUserId: user.id)
+        switch selectedFilter {
+        case .all, .rankings:
+            return theirs
+        case .artists, .albums, .songs:
+            return []
+        }
+    }
+    
+    /// Ratings and rankings merged into a single, date-sorted feed so they display the same way.
+    private var boardItems: [BuddyFeedItem] {
+        var items: [BuddyFeedItem] = filteredRatings.map { .rating($0) }
+        items += filteredRankings.map { .ranking($0) }
+        return items.sorted { $0.date > $1.date }
     }
 
     var body: some View {
@@ -61,12 +82,28 @@ struct OtherUserReviewsView: View {
             .hidden()
             .frame(width: 0, height: 0)
 
+            // Hidden NavigationLink for ranking detail navigation
+            NavigationLink(
+                destination: Group {
+                    if let ranking = rankingNav { RankingDetailView(ranking: ranking) }
+                },
+                isActive: Binding(
+                    get: { rankingNav != nil },
+                    set: { if !$0 { rankingNav = nil } }
+                )
+            ) {
+                EmptyView()
+            }
+            .hidden()
+            .frame(width: 0, height: 0)
+
             // Filter Picker
             Picker("Filter", selection: $selectedFilter) {
                 Text("all").tag(RatingFilter.all)
                 Text("songs").tag(RatingFilter.songs)
                 Text("artists").tag(RatingFilter.artists)
                 Text("albums").tag(RatingFilter.albums)
+                Text("rankings").tag(RatingFilter.rankings)
             }
             .pickerStyle(.segmented)
             .padding()
@@ -84,15 +121,15 @@ struct OtherUserReviewsView: View {
                         }
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
-                    } else if filteredRatings.isEmpty {
+                    } else if filteredRatings.isEmpty && filteredRankings.isEmpty {
                         VStack(spacing: 12) {
                             Image(systemName: "star.slash")
                                 .font(.system(size: 60))
                                 .foregroundColor(.gray)
-                            Text("no ratings yet")
+                            Text(selectedFilter == .rankings ? "no rankings yet" : "no ratings yet")
                                 .font(.headline)
                                 .foregroundColor(.secondary)
-                            Text("this user hasn't rated any music yet")
+                            Text(selectedFilter == .rankings ? "this user hasn't made any rankings yet" : "this user hasn't rated any music yet")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
@@ -101,20 +138,36 @@ struct OtherUserReviewsView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     } else {
-                        ForEach(filteredRatings) { rating in
-                            RatingRow(rating: rating, onReviewTapped: rating.hasReviewContent ? { reviewNavRating = rating } : nil)
-                                .id(rating.id)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    anchorId = rating.id
+                        ForEach(boardItems) { item in
+                            Group {
+                                switch item {
+                                case .rating(let rating):
+                                    RatingRow(rating: rating, onReviewTapped: rating.hasReviewContent ? { reviewNavRating = rating } : nil)
+                                        .onAppear {
+                                            if rating.id == filteredRatings.last?.id,
+                                               viewModel.hasMore {
+                                                Task { await viewModel.loadMore(firebaseService: firebaseService) }
+                                            }
+                                        }
+                                case .ranking(let ranking):
+                                    RankingRow(ranking: ranking)
+                                case .recommendation:
+                                    EmptyView()
+                                }
+                            }
+                            .id(item.id)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                anchorId = item.id
+                                switch item {
+                                case .rating(let rating):
                                     musicNavRating = rating
+                                case .ranking(let ranking):
+                                    rankingNav = ranking
+                                case .recommendation:
+                                    break
                                 }
-                                .onAppear {
-                                    if rating.id == filteredRatings.last?.id,
-                                       viewModel.hasMore {
-                                        Task { await viewModel.loadMore(firebaseService: firebaseService) }
-                                    }
-                                }
+                            }
                         }
 
                         if viewModel.isLoading && !viewModel.ratings.isEmpty {
@@ -143,7 +196,7 @@ struct OtherUserReviewsView: View {
                 }
             }
         }
-        .navigationTitle(user.username.map { "@\($0)'s ratings" } ?? "ratings")
+        .navigationTitle(user.username.map { "@\($0)'s board" } ?? "board")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             Task {

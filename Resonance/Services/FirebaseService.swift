@@ -26,10 +26,12 @@ class FirebaseService: ObservableObject {
     private let db = Firestore.firestore()
     
     @Published var allRatings: [UserRating] = []
+    @Published var allRankings: [UserRanking] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     
     private var ratingsListener: ListenerRegistration?
+    private var rankingsListener: ListenerRegistration?
     
     // Caching infrastructure
     private var ratingsCache: [String: [UserRating]] = [:] // keyed by userId
@@ -164,12 +166,61 @@ class FirebaseService: ObservableObject {
     func stopListening() {
         ratingsListener?.remove()
         ratingsListener = nil
+        rankingsListener?.remove()
+        rankingsListener = nil
     }
     
     /// Clears the cached ratings for a specific user so the next fetch hits Firestore directly.
     func invalidateRatingsCache(for userId: String) {
         ratingsCache.removeValue(forKey: userId)
         cacheTimestamp.removeValue(forKey: userId)
+    }
+    
+    /// Listen to all rankings - needed for the buddy board and ratings page
+    func startListeningToAllRankings() {
+        rankingsListener?.remove()
+        
+        rankingsListener = db.collection("rankings")
+            .order(by: "dateCreated", descending: true)
+            .limit(to: 500)
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    print("[FirebaseService] Error listening to rankings: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else { return }
+                
+                Task { @MainActor in
+                    self.allRankings = documents.compactMap { doc in
+                        try? doc.data(as: UserRanking.self)
+                    }
+                }
+            }
+    }
+    
+    // MARK: - Ranking CRUD Operations
+    
+    func saveRanking(_ ranking: UserRanking) async throws {
+        try db.collection("rankings")
+            .document(ranking.id)
+            .setData(from: ranking)
+    }
+    
+    func deleteRanking(id: String) async throws {
+        try await db.collection("rankings")
+            .document(id)
+            .delete()
+    }
+    
+    func getRanking(id: String) async throws -> UserRanking? {
+        let document = try await db.collection("rankings")
+            .document(id)
+            .getDocument()
+        
+        return try? document.data(as: UserRanking.self)
     }
     
     // MARK: - Rating CRUD Operations

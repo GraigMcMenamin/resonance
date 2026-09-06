@@ -725,11 +725,12 @@ struct MusicRecommendation: Codable, Identifiable, Equatable {
     }
 }
 
-/// A combined feed item that can be either a rating or a recommendation
+/// A combined feed item that can be either a rating, a recommendation, or a ranking
 /// Used to display a unified buddy activity feed
 enum BuddyFeedItem: Identifiable {
     case rating(UserRating)
     case recommendation(MusicRecommendation, receiverRating: UserRating?)
+    case ranking(UserRanking)
     
     var id: String {
         switch self {
@@ -737,6 +738,8 @@ enum BuddyFeedItem: Identifiable {
             return "rating_\(rating.id)"
         case .recommendation(let rec, _):
             return "rec_\(rec.id)"
+        case .ranking(let ranking):
+            return "ranking_\(ranking.id)"
         }
     }
     
@@ -746,7 +749,46 @@ enum BuddyFeedItem: Identifiable {
             return rating.dateRated
         case .recommendation(let rec, _):
             return rec.sentAt
+        case .ranking(let ranking):
+            return ranking.dateUpdated ?? ranking.dateCreated
         }
+    }
+}
+
+// MARK: - User Ranking Models
+
+/// A single entry within a ranking, in the order the user placed it (items[0] is rank #1).
+struct RankingEntry: Codable, Identifiable, Equatable {
+    var id: String { spotifyId }
+    let spotifyId: String
+    let name: String
+    let artistName: String?
+    let imageURL: String?
+}
+
+/// A user-created, named ordered list of songs, albums, or artists.
+struct UserRanking: Codable, Identifiable, Equatable {
+    var id: String // UUID
+    let userId: String
+    var name: String // Ranking title, e.g. "Top 5 Sad Songs"
+    let type: RankingType
+    var items: [RankingEntry] // Ordered; items[0] is rank #1
+    let dateCreated: Date
+    var dateUpdated: Date?
+    var username: String? // Denormalized username of the creator
+    var userImageURL: String? // Denormalized profile image of the creator
+    
+    enum RankingType: String, Codable {
+        case artist
+        case album
+        case track
+    }
+    
+    var itemCount: Int { items.count }
+    var topItem: RankingEntry? { items.first }
+    
+    static func == (lhs: UserRanking, rhs: UserRanking) -> Bool {
+        lhs.id == rhs.id && lhs.items == rhs.items && lhs.name == rhs.name && lhs.dateUpdated == rhs.dateUpdated
     }
 }
 
