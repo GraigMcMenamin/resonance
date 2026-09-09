@@ -770,7 +770,8 @@ struct RankingEntry: Codable, Identifiable, Equatable {
 struct UserRanking: Codable, Identifiable, Equatable {
     var id: String // UUID
     let userId: String
-    var name: String // Ranking title, e.g. "Top 5 Sad Songs"
+    var name: String // Ranking title, e.g. "Beatles Albums"
+    var description: String? // Optional description, 150 character limit
     let type: RankingType
     var items: [RankingEntry] // Ordered; items[0] is rank #1
     let dateCreated: Date
@@ -788,7 +789,7 @@ struct UserRanking: Codable, Identifiable, Equatable {
     var topItem: RankingEntry? { items.first }
     
     static func == (lhs: UserRanking, rhs: UserRanking) -> Bool {
-        lhs.id == rhs.id && lhs.items == rhs.items && lhs.name == rhs.name && lhs.dateUpdated == rhs.dateUpdated
+        lhs.id == rhs.id && lhs.items == rhs.items && lhs.name == rhs.name && lhs.description == rhs.description && lhs.dateUpdated == rhs.dateUpdated
     }
 }
 

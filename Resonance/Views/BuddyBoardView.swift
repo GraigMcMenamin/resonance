@@ -108,16 +108,7 @@ struct BuddyBoardView: View {
             }
             .navigationTitle(selectedSection == .myRatings ? "my board" : "buddy board")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if selectedSection == .myRatings {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(action: { showCreateRanking = true }) {
-                            Label("ranking", systemImage: "plus.circle")
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: $showCreateRanking) {
+            .fullScreenCover(isPresented: $showCreateRanking) {
                 CreateRankingView(rankingsManager: rankingsManager)
             }
             .onChange(of: selectedSection) { newValue in
@@ -285,6 +276,22 @@ struct BuddyBoardView: View {
             ScrollViewReader { proxy in
                 // Always use a List so pull-to-refresh works in all states
                 List {
+                    if selectedFilter == .rankings {
+                        HStack {
+                            Button(action: { showCreateRanking = true }) {
+                                HStack(spacing: 6) {
+                                    Text("ranking")
+                                    Image(systemName: "plus.circle")
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Color(red: 0.6, green: 0.4, blue: 0.8))
+                            Spacer()
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
+                    
                     if myBoardItems.isEmpty {
                         VStack(spacing: 12) {
                             Image(systemName: "star.slash")

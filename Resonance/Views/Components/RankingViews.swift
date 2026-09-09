@@ -17,6 +17,7 @@ import SwiftUI
 struct RankingSummaryContent: View {
     let ranking: UserRanking
     var imageSize: CGFloat = 60
+    var showDate: Bool = true
     
     private var itemTypeIcon: String {
         switch ranking.type {
@@ -65,6 +66,12 @@ struct RankingSummaryContent: View {
             }
             
             Spacer()
+            
+            if showDate {
+                Text((ranking.dateUpdated ?? ranking.dateCreated).formatted(date: .abbreviated, time: .omitted))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
             
             Image(systemName: "chevron.right")
                 .font(.caption)
@@ -167,7 +174,7 @@ struct RankingFeedRow: View {
             }
             
             Button(action: { navigateToDetail = true }) {
-                RankingSummaryContent(ranking: ranking, imageSize: 50)
+                RankingSummaryContent(ranking: ranking, imageSize: 50, showDate: false)
             }
             .buttonStyle(.plain)
             .padding(.top, 16)
@@ -491,9 +498,16 @@ struct RankingDetailView: View {
     @EnvironmentObject var rankingsManager: RankingsManager
     @Environment(\.dismiss) var dismiss
     @State private var showingDeleteConfirmation = false
+    @State private var showingEditRanking = false
+    @State private var currentRanking: UserRanking
+    
+    init(ranking: UserRanking) {
+        self.ranking = ranking
+        _currentRanking = State(initialValue: ranking)
+    }
     
     private var isOwner: Bool {
-        authManager.currentUser?.id == ranking.userId
+        authManager.currentUser?.id == currentRanking.userId
     }
     
     var body: some View {
@@ -504,21 +518,27 @@ struct RankingDetailView: View {
             List {
                 Section {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(ranking.name)
+                        Text(currentRanking.name)
                             .font(.title2)
                             .fontWeight(.bold)
-                        if let username = ranking.username {
+                        if let username = currentRanking.username {
                             Text("by \(username)")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
+                        if let description = currentRanking.description, !description.isEmpty {
+                            Text(description)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .padding(.top, 2)
+                        }
                     }
                     .padding(.vertical, 4)
-                    .listRowBackground(Color.clear)
+                    .listRowBackground(Color(red: 0.15, green: 0.08, blue: 0.18))
                 }
                 
                 Section {
-                    ForEach(Array(ranking.items.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(currentRanking.items.enumerated()), id: \.element.id) { index, entry in
                         NavigationLink(destination: destinationView(for: entry)) {
                             HStack(spacing: 12) {
                                 Text("\(index + 1)")
@@ -534,7 +554,7 @@ struct RankingDetailView: View {
                                                 .resizable()
                                                 .aspectRatio(contentMode: .fill)
                                                 .frame(width: 50, height: 50)
-                                                .clipShape(ranking.type == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                                                .clipShape(currentRanking.type == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
                                         default:
                                             itemPlaceholder
                                         }
@@ -560,6 +580,8 @@ struct RankingDetailView: View {
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.black)
         }
         .navigationTitle("ranking")
         .navigationBarTitleDisplayMode(.inline)
@@ -570,12 +592,17 @@ struct RankingDetailView: View {
                         Image(systemName: "trash")
                     }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showingEditRanking = true }) {
+                        Image(systemName: "pencil")
+                    }
+                }
             }
         }
         .alert("Delete Ranking", isPresented: $showingDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 Task {
-                    await rankingsManager.deleteRanking(id: ranking.id)
+                    await rankingsManager.deleteRanking(id: currentRanking.id)
                     dismiss()
                 }
             }
@@ -583,20 +610,27 @@ struct RankingDetailView: View {
         } message: {
             Text("Are you sure you want to delete this ranking?")
         }
+        .fullScreenCover(isPresented: $showingEditRanking, onDismiss: {
+            if let updated = rankingsManager.getRanking(id: currentRanking.id) {
+                currentRanking = updated
+            }
+        }) {
+            CreateRankingView(rankingsManager: rankingsManager, existingRanking: currentRanking)
+        }
     }
     
     private var itemPlaceholder: some View {
-        Image(systemName: ranking.type == .artist ? "music.mic" : (ranking.type == .album ? "square.stack" : "music.note"))
+        Image(systemName: currentRanking.type == .artist ? "music.mic" : (currentRanking.type == .album ? "square.stack" : "music.note"))
             .font(.title3)
             .foregroundColor(.gray)
             .frame(width: 50, height: 50)
             .background(Color.gray.opacity(0.2))
-            .clipShape(ranking.type == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+            .clipShape(currentRanking.type == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
     }
     
     @ViewBuilder
     private func destinationView(for entry: RankingEntry) -> some View {
-        switch ranking.type {
+        switch currentRanking.type {
         case .artist:
             ArtistDetailView(
                 artistId: entry.spotifyId,
@@ -627,16 +661,40 @@ struct RankingDetailView: View {
 
 struct CreateRankingView: View {
     @ObservedObject var rankingsManager: RankingsManager
+    var existingRanking: UserRanking? = nil
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var spotifyService: SpotifyService
     @Environment(\.dismiss) var dismiss
     
-    @State private var name: String = ""
-    @State private var type: UserRanking.RankingType = .track
-    @State private var items: [RankingEntry] = []
+    @State private var name: String
+    @State private var description: String
+    @State private var type: UserRanking.RankingType
+    @State private var items: [RankingEntry]
     @State private var showItemSearch = false
+    @State private var showAlbumSearchForTracks = false
+    @State private var showArtistSearchForAlbums = false
     @State private var isSaving = false
+    @State private var isPopulating = false
     @State private var errorMessage: String?
+    @FocusState private var focusedField: Field?
+    
+    private enum Field {
+        case name, description
+    }
+    
+    private let descriptionLimit = 150
+    
+    // Explicit row color so it matches the previous sheet's "elevated" look, since fullScreenCover doesn't apply that automatically.
+    private let rowBackgroundColor = Color(red: 0.24, green: 0.15, blue: 0.28)
+    
+    init(rankingsManager: RankingsManager, existingRanking: UserRanking? = nil) {
+        self.rankingsManager = rankingsManager
+        self.existingRanking = existingRanking
+        _name = State(initialValue: existingRanking?.name ?? "")
+        _description = State(initialValue: existingRanking?.description ?? "")
+        _type = State(initialValue: existingRanking?.type ?? .track)
+        _items = State(initialValue: existingRanking?.items ?? [])
+    }
     
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !items.isEmpty
@@ -652,7 +710,24 @@ struct CreateRankingView: View {
                     Form {
                         Section("ranking name") {
                             TextField("e.g. Top 5 Sad Songs", text: $name)
+                                .focused($focusedField, equals: .name)
                         }
+                        .listRowBackground(rowBackgroundColor)
+                        
+                        Section("description") {
+                            TextField("add a description (optional)", text: $description, axis: .vertical)
+                                .lineLimit(3, reservesSpace: false)
+                                .focused($focusedField, equals: .description)
+                                .onChange(of: description) { newValue in
+                                    if newValue.count > descriptionLimit {
+                                        description = String(newValue.prefix(descriptionLimit))
+                                    }
+                                }
+                            Text("\(description.count)/\(descriptionLimit)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .listRowBackground(rowBackgroundColor)
                         
                         Section("type") {
                             Picker("Type", selection: $type) {
@@ -663,6 +738,28 @@ struct CreateRankingView: View {
                             .pickerStyle(.segmented)
                             .disabled(!items.isEmpty)
                         }
+                        .listRowBackground(rowBackgroundColor)
+                        
+                        Section("autofill (optional)") {
+                            Button(action: { showAlbumSearchForTracks = true }) {
+                                Label("all songs on an album", systemImage: "square.stack")
+                            }
+                            .disabled(!items.isEmpty || isPopulating)
+                            
+                            Button(action: { showArtistSearchForAlbums = true }) {
+                                Label("all albums by an artist", systemImage: "music.mic")
+                            }
+                            .disabled(!items.isEmpty || isPopulating)
+                            
+                            if isPopulating {
+                                HStack {
+                                    Spacer()
+                                    ProgressView()
+                                    Spacer()
+                                }
+                            }
+                        }
+                        .listRowBackground(rowBackgroundColor)
                         
                         Section("items (drag to reorder)") {
                             ForEach(items) { entry in
@@ -673,15 +770,10 @@ struct CreateRankingView: View {
                                         .frame(width: 24, alignment: .leading)
                                     Text(entry.name)
                                         .lineLimit(1)
-                                    if let artistName = entry.artistName {
-                                        Text(artistName)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                            .lineLimit(1)
-                                    }
                                 }
                             }
                             .onMove { indices, newOffset in
+                                focusedField = nil
                                 items.move(fromOffsets: indices, toOffset: newOffset)
                             }
                             .onDelete { offsets in
@@ -692,24 +784,27 @@ struct CreateRankingView: View {
                                 Label("add item", systemImage: "plus.circle.fill")
                             }
                         }
+                        .listRowBackground(rowBackgroundColor)
                         
                         if let error = errorMessage {
                             Text(error)
                                 .font(.caption)
                                 .foregroundColor(.red)
+                                .listRowBackground(rowBackgroundColor)
                         }
                     }
                     .scrollContentBackground(.hidden)
+                    .scrollDismissesKeyboard(.immediately)
+                    .environment(\.editMode, .constant(.active))
                 }
             }
-            .navigationTitle("new ranking")
+            .tint(.white)
+            .navigationTitle(existingRanking == nil ? "new ranking" : "edit ranking")
             .navigationBarTitleDisplayMode(.inline)
+            .interactiveDismissDisabled(true)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(isSaving ? "Saving..." : "Save") {
@@ -726,7 +821,57 @@ struct CreateRankingView: View {
                 }
                 .environmentObject(spotifyService)
             }
+            .sheet(isPresented: $showAlbumSearchForTracks) {
+                RankingItemSearchSheet(type: .album) { entry in
+                    Task { await populateAlbumTracks(albumId: entry.spotifyId, albumName: entry.name) }
+                }
+                .environmentObject(spotifyService)
+            }
+            .sheet(isPresented: $showArtistSearchForAlbums) {
+                RankingItemSearchSheet(type: .artist) { entry in
+                    Task { await populateArtistAlbums(artistId: entry.spotifyId, artistName: entry.name) }
+                }
+                .environmentObject(spotifyService)
+            }
         }
+    }
+    
+    private func populateAlbumTracks(albumId: String, albumName: String) async {
+        isPopulating = true
+        errorMessage = nil
+        do {
+            let album = try await spotifyService.getAlbum(id: albumId)
+            let albumImageURL = album.imageURL?.absoluteString
+            type = .track
+            items = album.tracks.items.map { track in
+                RankingEntry(spotifyId: track.id, name: track.name, artistName: track.artistNames, imageURL: albumImageURL)
+            }
+            if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                name = albumName
+            }
+        } catch {
+            errorMessage = "Failed to load album tracks: \(error.localizedDescription)"
+        }
+        isPopulating = false
+    }
+    
+    private func populateArtistAlbums(artistId: String, artistName: String) async {
+        isPopulating = true
+        errorMessage = nil
+        do {
+            let albums = try await spotifyService.getArtistAlbums(id: artistId, limit: 50)
+            let fullLengthAlbums = albums.filter { ($0.totalTracks ?? 0) >= 5 }
+            type = .album
+            items = fullLengthAlbums.map { album in
+                RankingEntry(spotifyId: album.id, name: album.name, artistName: album.artistNames, imageURL: album.imageURL?.absoluteString)
+            }
+            if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                name = "\(artistName) albums"
+            }
+        } catch {
+            errorMessage = "Failed to load artist albums: \(error.localizedDescription)"
+        }
+        isPopulating = false
     }
     
     private func save() async {
@@ -735,13 +880,14 @@ struct CreateRankingView: View {
         errorMessage = nil
         
         let ranking = UserRanking(
-            id: UUID().uuidString,
+            id: existingRanking?.id ?? UUID().uuidString,
             userId: user.id,
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : String(description.trimmingCharacters(in: .whitespacesAndNewlines).prefix(descriptionLimit)),
             type: type,
             items: items,
-            dateCreated: Date(),
-            dateUpdated: nil,
+            dateCreated: existingRanking?.dateCreated ?? Date(),
+            dateUpdated: existingRanking == nil ? nil : Date(),
             username: user.username,
             userImageURL: user.displayImageURL
         )
