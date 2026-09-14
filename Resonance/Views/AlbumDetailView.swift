@@ -18,6 +18,7 @@ struct AlbumDetailView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var buddyManager: BuddyManager
+    @EnvironmentObject var rankingsManager: RankingsManager
     
     @State private var album: SpotifyAlbumFull?
     @State private var isLoading = true
@@ -27,6 +28,7 @@ struct AlbumDetailView: View {
     @State private var buddyRatings: [UserRating] = []
     @State private var showSendSheet = false
     @State private var itemUserRating: UserRating?
+    @State private var showRankAllSongsSheet = false
     /// Track average ratings fetched locally — never writes to the global allRatings store.
     @State private var trackAverageRatings: [String: Double] = [:]
     
@@ -94,6 +96,13 @@ struct AlbumDetailView: View {
             .environmentObject(firebaseService)
             .environmentObject(authManager)
             .environmentObject(buddyManager)
+        }
+        .fullScreenCover(isPresented: $showRankAllSongsSheet) {
+            CreateRankingView(
+                rankingsManager: rankingsManager,
+                presetAlbumId: albumId,
+                presetAlbumName: album?.name ?? albumName
+            )
         }
         .task {
             if !spotifyService.isAuthenticated {
@@ -315,6 +324,24 @@ struct AlbumDetailView: View {
                 }
             }
             
+            // Rank All Songs Button
+            if let tracks = album?.tracks.items, !tracks.isEmpty {
+                Button(action: { showRankAllSongsSheet = true }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "list.number")
+                        Text("rank all songs")
+                    }
+                    .font(.footnote)
+                    .foregroundColor(.white.opacity(0.8))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                    )
+                }
+            }
+            
             // Buddy Ratings Section
             BuddyRatingsSection(
                 buddyRatings: buddyRatings,
@@ -373,28 +400,14 @@ struct AlbumDetailView: View {
                 
                 Spacer()
                 
-                // Column headers for ratings
-                HStack(spacing: 0) {
-                    VStack(spacing: 1) {
-                        Text("your")
-                        Text("rating")
-                    }
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.6))
-                    .frame(width: 50, alignment: .center)
-                    
-                    Rectangle()
-                        .fill(Color.white.opacity(0.15))
-                        .frame(width: 1, height: 28)
-                    
-                    VStack(spacing: 1) {
-                        Text("average")
-                        Text("rating")
-                    }
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.6))
-                    .frame(width: 55, alignment: .center)
+                // Column header for average rating
+                VStack(spacing: 1) {
+                    Text("average")
+                    Text("rating")
                 }
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.6))
+                .frame(width: 55, alignment: .center)
                 .padding(.trailing, 32) // Account for row inner padding + chevron spacing + chevron width
             }
             .padding(.horizontal)

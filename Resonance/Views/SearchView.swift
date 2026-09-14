@@ -271,12 +271,6 @@ struct ArtistListView: View {
                     }
                     
                     Spacer()
-                    
-                    RatingBadgeCompact(
-                        spotifyId: artist.id,
-                        ratingsManager: ratingsManager,
-                        userId: userId
-                    )
                 }
             }
             .swipeActions(edge: .trailing) {
@@ -367,12 +361,6 @@ struct AlbumListView: View {
                     }
                     
                     Spacer()
-                    
-                    RatingBadgeCompact(
-                        spotifyId: album.id,
-                        ratingsManager: ratingsManager,
-                        userId: userId
-                    )
                 }
             }
             .swipeActions(edge: .trailing) {
@@ -465,12 +453,6 @@ struct TrackListView: View {
                     }
                     
                     Spacer()
-                    
-                    RatingBadgeCompact(
-                        spotifyId: track.id,
-                        ratingsManager: ratingsManager,
-                        userId: userId
-                    )
                 }
             }
             .swipeActions(edge: .trailing) {
@@ -573,7 +555,6 @@ struct AllResultsView: View {
                 artistImage(artist: artist)
                 artistInfo(artist: artist)
                 Spacer()
-                RatingBadgeCompact(spotifyId: artist.id, ratingsManager: ratingsManager, userId: userId)
             }
             .padding(.horizontal)
         }
@@ -619,7 +600,6 @@ struct AllResultsView: View {
                 albumImage(album: album)
                 albumInfo(album: album)
                 Spacer()
-                RatingBadgeCompact(spotifyId: album.id, ratingsManager: ratingsManager, userId: userId)
             }
             .padding(.horizontal)
         }
@@ -668,7 +648,6 @@ struct AllResultsView: View {
                 trackImage(track: track)
                 trackInfo(track: track)
                 Spacer()
-                trackRating(track: track)
             }
             .padding(.horizontal)
         }
@@ -704,9 +683,6 @@ struct AllResultsView: View {
         }
     }
     
-    private func trackRating(track: SpotifyTrack) -> some View {
-        RatingBadgeCompact(spotifyId: track.id, ratingsManager: ratingsManager, userId: userId)
-    }
 }
 
 // MARK: - User List

@@ -20,6 +20,7 @@ struct SongDetailView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var buddyManager: BuddyManager
+    @EnvironmentObject var rankingsManager: RankingsManager
     
     @State private var track: SpotifyTrack?
     @State private var isLoading = true
@@ -28,7 +29,10 @@ struct SongDetailView: View {
     @State private var buddies: [Buddy] = []
     @State private var buddyRatings: [UserRating] = []
     @State private var showSendSheet = false
+    @State private var showAddToRankingSheet = false
     @State private var itemUserRating: UserRating?
+    /// Explicitly fetched album average — never writes to the global allRatings store.
+    @State private var albumAverageRating: Double?
     
     var body: some View {
         ZStack {
@@ -91,6 +95,20 @@ struct SongDetailView: View {
             .environmentObject(authManager)
             .environmentObject(buddyManager)
         }
+        .sheet(isPresented: $showAddToRankingSheet) {
+            AddToRankingSheet(
+                entry: RankingEntry(
+                    spotifyId: trackId,
+                    name: track?.name ?? trackName,
+                    artistName: track?.artistNames ?? artistName,
+                    imageURL: (track?.imageURL ?? imageURL)?.absoluteString
+                ),
+                type: .track
+            )
+            .environmentObject(rankingsManager)
+            .environmentObject(authManager)
+            .environmentObject(spotifyService)
+        }
         .task {
             if !spotifyService.isAuthenticated {
                 await spotifyService.authenticate()
@@ -98,9 +116,11 @@ struct SongDetailView: View {
             async let trackLoad: Void = loadTrackData()
             async let buddyLoad: Void = loadBuddyRatings()
             async let userRatingLoad: Void = fetchUserRating()
+            async let albumAverageLoad: Void = fetchAlbumAverageRating()
             await trackLoad
             await buddyLoad
             await userRatingLoad
+            await albumAverageLoad
         }
     }
     
@@ -287,6 +307,22 @@ struct SongDetailView: View {
                 }
             }
             
+            // Add To Ranking Button
+            Button(action: { showAddToRankingSheet = true }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "list.number")
+                    Text("add to a ranking")
+                }
+                .font(.footnote)
+                .foregroundColor(.white.opacity(0.8))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                )
+            }
+            
             // Buddy Ratings Section
             BuddyRatingsSection(
                 buddyRatings: buddyRatings,
@@ -331,6 +367,13 @@ struct SongDetailView: View {
         }
     }
     
+    private func fetchAlbumAverageRating() async {
+        guard let albumId = albumId else { return }
+        if let fetched = try? await firebaseService.fetchAverageRatings(for: [albumId]) {
+            albumAverageRating = fetched[albumId]
+        }
+    }
+    
     
     // MARK: - Album Section
     
@@ -347,18 +390,12 @@ struct SongDetailView: View {
                     
                     Spacer()
                     
-                    // Column headers for ratings
-                    HStack(spacing: 10) {
-                        Text("your %")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.6))
-                        
-                        Text("avg %")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.6))
-                            .frame(width: 50, alignment: .trailing)
-                    }
-                    .padding(.trailing, 20) // Account for chevron
+                    // Column header for average rating
+                    Text("average rating")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                        .frame(width: 50, alignment: .trailing)
+                        .padding(.trailing, 20) // Account for chevron
                 }
                 
                 NavigationLink(destination: AlbumDetailView(
@@ -401,7 +438,7 @@ struct SongDetailView: View {
                         
                         Spacer()
                         
-                        RatingBadgeCompact(spotifyId: album.id, ratingsManager: ratingsManager, userId: authManager.currentUser?.id)
+                        RatingBadgeCompact(spotifyId: album.id, ratingsManager: ratingsManager, userId: authManager.currentUser?.id, averageRatingOverride: albumAverageRating)
                         
                         Image(systemName: "chevron.right")
                             .font(.caption)
@@ -465,7 +502,7 @@ struct SongDetailView: View {
                         
                         Spacer()
                         
-                        RatingBadgeCompact(spotifyId: albumId, ratingsManager: ratingsManager, userId: authManager.currentUser?.id)
+                        RatingBadgeCompact(spotifyId: albumId, ratingsManager: ratingsManager, userId: authManager.currentUser?.id, averageRatingOverride: albumAverageRating)
                         
                         Image(systemName: "chevron.right")
                             .font(.caption)

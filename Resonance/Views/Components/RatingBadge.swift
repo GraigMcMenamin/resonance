@@ -81,7 +81,7 @@ struct RatingBadge: View {
     }
 }
 
-/// Compact version for list items — fixed-width columns with a divider line
+/// Compact version for list items — shows only the average rating
 struct RatingBadgeCompact: View {
     let spotifyId: String
     @ObservedObject var ratingsManager: RatingsManager
@@ -89,39 +89,47 @@ struct RatingBadgeCompact: View {
     /// When provided, used instead of querying ratingsManager (avoids global state mutation).
     var averageRatingOverride: Double? = nil
     
-    private var userRating: UserRating? {
-        guard let userId = userId else { return nil }
-        let ratingId = UserRating.makeId(userId: userId, spotifyId: spotifyId)
-        return ratingsManager.getRating(for: ratingId)
+    private var averageRating: Double? {
+        averageRatingOverride ?? ratingsManager.getAverageRating(for: spotifyId)
     }
+    
+    var body: some View {
+        Text(averageRating.map { "\(Int($0))" } ?? "")
+            .font(.subheadline)
+            .fontWeight(.bold)
+            .foregroundColor(.white)
+            .frame(width: 55, alignment: .center)
+    }
+}
+
+/// Average rating number + colored bar, meant to sit directly under artwork rather than off to the side.
+struct RatingBadgeUnderArt: View {
+    let spotifyId: String
+    @ObservedObject var ratingsManager: RatingsManager
+    /// When provided, used instead of querying ratingsManager (avoids global state mutation).
+    var averageRatingOverride: Double? = nil
+    var width: CGFloat = 50
     
     private var averageRating: Double? {
         averageRatingOverride ?? ratingsManager.getAverageRating(for: spotifyId)
     }
     
     var body: some View {
-        HStack(spacing: 0) {
-            // User rating column
-            Text(userRating.map { "\($0.percentage)" } ?? "")
-                .font(.subheadline)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-                .frame(width: 50, alignment: .center)
-            
-            // Column divider
-            Rectangle()
-                .fill(Color.white.opacity(0.15))
-                .frame(width: 1)
-            
-            // Average rating column
-            Text(averageRating.map { "\(Int($0))" } ?? "")
-                .font(.subheadline)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-                .frame(width: 55, alignment: .center)
+        if let average = averageRating {
+            HStack(spacing: 6) {
+                RatingBarMini(percentage: average)
+                    .frame(height: 6)
+                Text("\(Int(average))%")
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(colorForPercentage(average))
+                    .fixedSize()
+            }
+            .frame(width: width)
         }
     }
 }
+
 
 // Mini rating bar for compact badge
 struct RatingBarMini: View {

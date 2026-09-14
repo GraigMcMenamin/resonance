@@ -518,7 +518,6 @@ struct MailboxView: View {
 
             Spacer(minLength: 0)
         }
-        .opacity(notification.read ? 0.6 : 1.0)
     }
 
     private func activityIcon(_ notification: AppNotification) -> String {

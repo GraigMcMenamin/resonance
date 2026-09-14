@@ -662,6 +662,10 @@ struct RankingDetailView: View {
 struct CreateRankingView: View {
     @ObservedObject var rankingsManager: RankingsManager
     var existingRanking: UserRanking? = nil
+    /// When set, the ranking is auto-populated with this album's tracks on open (used by the
+    /// "rank all songs" entry point on AlbumDetailView).
+    var presetAlbumId: String? = nil
+    var presetAlbumName: String? = nil
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var spotifyService: SpotifyService
     @Environment(\.dismiss) var dismiss
@@ -687,13 +691,23 @@ struct CreateRankingView: View {
     // Explicit row color so it matches the previous sheet's "elevated" look, since fullScreenCover doesn't apply that automatically.
     private let rowBackgroundColor = Color(red: 0.24, green: 0.15, blue: 0.28)
     
-    init(rankingsManager: RankingsManager, existingRanking: UserRanking? = nil) {
+    init(
+        rankingsManager: RankingsManager,
+        existingRanking: UserRanking? = nil,
+        presetType: UserRanking.RankingType? = nil,
+        presetItems: [RankingEntry] = [],
+        presetName: String? = nil,
+        presetAlbumId: String? = nil,
+        presetAlbumName: String? = nil
+    ) {
         self.rankingsManager = rankingsManager
         self.existingRanking = existingRanking
-        _name = State(initialValue: existingRanking?.name ?? "")
+        self.presetAlbumId = presetAlbumId
+        self.presetAlbumName = presetAlbumName
+        _name = State(initialValue: existingRanking?.name ?? presetName ?? "")
         _description = State(initialValue: existingRanking?.description ?? "")
-        _type = State(initialValue: existingRanking?.type ?? .track)
-        _items = State(initialValue: existingRanking?.items ?? [])
+        _type = State(initialValue: existingRanking?.type ?? presetType ?? .track)
+        _items = State(initialValue: existingRanking?.items ?? presetItems)
     }
     
     private var canSave: Bool {
@@ -742,12 +756,12 @@ struct CreateRankingView: View {
                         
                         Section("autofill (optional)") {
                             Button(action: { showAlbumSearchForTracks = true }) {
-                                Label("all songs on an album", systemImage: "square.stack")
+                                Label("rank all songs on an album", systemImage: "square.stack")
                             }
                             .disabled(!items.isEmpty || isPopulating)
                             
                             Button(action: { showArtistSearchForAlbums = true }) {
-                                Label("all albums by an artist", systemImage: "music.mic")
+                                Label("rank all albums by an artist", systemImage: "music.mic")
                             }
                             .disabled(!items.isEmpty || isPopulating)
                             
@@ -832,6 +846,11 @@ struct CreateRankingView: View {
                     Task { await populateArtistAlbums(artistId: entry.spotifyId, artistName: entry.name) }
                 }
                 .environmentObject(spotifyService)
+            }
+            .task {
+                if let albumId = presetAlbumId, items.isEmpty {
+                    await populateAlbumTracks(albumId: albumId, albumName: presetAlbumName ?? "")
+                }
             }
         }
     }
@@ -1026,6 +1045,105 @@ struct RankingItemSearchSheet: View {
                 print("Error searching: \(error)")
             }
             isLoading = false
+        }
+    }
+}
+
+// MARK: - Add To Ranking Sheet
+
+/// Lets a user add a single item (song, album, or artist) to an existing ranking of the
+/// matching type, or create a brand new ranking that starts with that item.
+struct AddToRankingSheet: View {
+    let entry: RankingEntry
+    let type: UserRanking.RankingType
+    
+    @EnvironmentObject var rankingsManager: RankingsManager
+    @EnvironmentObject var authManager: AuthenticationManager
+    @Environment(\.dismiss) var dismiss
+    
+    @State private var showCreateNew = false
+    @State private var isAdding = false
+    @State private var errorMessage: String?
+    
+    // Lighter than the page background so rows read as distinct cards.
+    private let rowBackgroundColor = Color(red: 0.24, green: 0.15, blue: 0.28)
+    
+    private var myRankings: [UserRanking] {
+        guard let userId = authManager.currentUser?.id else { return [] }
+        return rankingsManager.rankings(forUserId: userId).filter { $0.type == type }
+    }
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color(red: 0.15, green: 0.08, blue: 0.18)
+                    .ignoresSafeArea()
+                
+                List {
+                    Section {
+                        Button(action: { showCreateNew = true }) {
+                            Label("create new ranking", systemImage: "plus.circle.fill")
+                        }
+                    }
+                    .listRowBackground(rowBackgroundColor)
+                    
+                    if !myRankings.isEmpty {
+                        Section("add to existing ranking") {
+                            ForEach(myRankings) { ranking in
+                                let alreadyIncluded = ranking.items.contains(where: { $0.spotifyId == entry.spotifyId })
+                                Button(action: { Task { await addTo(ranking) } }) {
+                                    HStack {
+                                        Text(ranking.name)
+                                        Spacer()
+                                        if alreadyIncluded {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                }
+                                .disabled(isAdding || alreadyIncluded)
+                            }
+                        }
+                        .listRowBackground(rowBackgroundColor)
+                    }
+                    
+                    if let error = errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .listRowBackground(rowBackgroundColor)
+                    }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+            }
+            .tint(.white)
+            .navigationTitle("add to a ranking")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .fullScreenCover(isPresented: $showCreateNew, onDismiss: { dismiss() }) {
+                CreateRankingView(rankingsManager: rankingsManager, presetType: type, presetItems: [entry])
+            }
+        }
+    }
+    
+    private func addTo(_ ranking: UserRanking) async {
+        guard !ranking.items.contains(where: { $0.spotifyId == entry.spotifyId }) else { return }
+        isAdding = true
+        errorMessage = nil
+        var updated = ranking
+        updated.items.append(entry)
+        updated.dateUpdated = Date()
+        await rankingsManager.addOrUpdateRanking(updated)
+        isAdding = false
+        if rankingsManager.errorMessage == nil {
+            dismiss()
+        } else {
+            errorMessage = rankingsManager.errorMessage
         }
     }
 }

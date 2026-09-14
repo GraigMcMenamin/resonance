@@ -29,6 +29,9 @@ struct ArtistDetailView: View {
     @State private var buddyRatings: [UserRating] = []
     @State private var showSendSheet = false
     @State private var itemUserRating: UserRating?
+    /// Explicitly fetched averages for top tracks/albums — never writes to the global allRatings store.
+    @State private var trackAverageRatings: [String: Double] = [:]
+    @State private var albumAverageRatings: [String: Double] = [:]
     
     var body: some View {
         ZStack {
@@ -314,18 +317,12 @@ struct ArtistDetailView: View {
                 
                 Spacer()
                 
-                // Column headers for ratings
-                HStack(spacing: 10) {
-                    Text("your %")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                    
-                    Text("avg %")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                        .frame(width: 50, alignment: .trailing)
-                }
-                .padding(.trailing, 20) // Account for chevron
+                // Column header for average rating
+                Text("avg %")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.6))
+                    .frame(width: 50, alignment: .trailing)
+                    .padding(.trailing, 20) // Account for chevron
             }
             .padding(.horizontal)
             
@@ -339,7 +336,7 @@ struct ArtistDetailView: View {
                         albumId: track.album?.id,
                         imageURL: track.imageURL
                     )) {
-                        TrackRowCompact(track: track, index: index + 1, ratingsManager: ratingsManager, userId: authManager.currentUser?.id)
+                        TrackRowCompact(track: track, index: index + 1, ratingsManager: ratingsManager, userId: authManager.currentUser?.id, averageRatingOverride: trackAverageRatings[track.id])
                     }
                     .buttonStyle(.plain)
                 }
@@ -386,7 +383,7 @@ struct ArtistDetailView: View {
                             artistName: album.artistNames,
                             imageURL: album.imageURL
                         )) {
-                            AlbumCardView(album: album, ratingsManager: ratingsManager, userId: authManager.currentUser?.id)
+                            AlbumCardView(album: album, ratingsManager: ratingsManager, userId: authManager.currentUser?.id, averageRatingOverride: albumAverageRatings[album.id])
                         }
                         .buttonStyle(.plain)
                     }
@@ -415,6 +412,16 @@ struct ArtistDetailView: View {
         }
         
         isLoading = false
+        await loadAverageRatings()
+    }
+    
+    private func loadAverageRatings() async {
+        if let fetched = try? await firebaseService.fetchAverageRatings(for: topTracks.map { $0.id }) {
+            trackAverageRatings = fetched
+        }
+        if let fetched = try? await firebaseService.fetchAverageRatings(for: albums.map { $0.id }) {
+            albumAverageRatings = fetched
+        }
     }
 }
 
@@ -425,6 +432,7 @@ struct TrackRowCompact: View {
     let index: Int
     @ObservedObject var ratingsManager: RatingsManager
     let userId: String?
+    var averageRatingOverride: Double? = nil
     
     var body: some View {
         HStack(spacing: 10) {
@@ -469,7 +477,7 @@ struct TrackRowCompact: View {
             
             Spacer()
             
-            RatingBadgeCompact(spotifyId: track.id, ratingsManager: ratingsManager, userId: userId)
+            RatingBadgeCompact(spotifyId: track.id, ratingsManager: ratingsManager, userId: userId, averageRatingOverride: averageRatingOverride)
             
             Image(systemName: "chevron.right")
                 .font(.caption)
@@ -490,6 +498,7 @@ struct AlbumCardView: View {
     let album: SpotifyAlbum
     @ObservedObject var ratingsManager: RatingsManager
     let userId: String?
+    var averageRatingOverride: Double? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -524,8 +533,8 @@ struct AlbumCardView: View {
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.6))
                 
-                RatingBadgeCompact(spotifyId: album.id, ratingsManager: ratingsManager, userId: userId)
-                    .frame(height: 20)
+                RatingBadgeUnderArt(spotifyId: album.id, ratingsManager: ratingsManager, averageRatingOverride: averageRatingOverride, width: 140)
+                    .frame(height: 20, alignment: .top)
             }
             .frame(height: 60, alignment: .top)
         }
