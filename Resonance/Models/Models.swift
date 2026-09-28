@@ -779,6 +779,10 @@ struct UserRanking: Codable, Identifiable, Equatable {
     var username: String? // Denormalized username of the creator
     var userImageURL: String? // Denormalized profile image of the creator
     
+    // Aggregated counts (maintained by Cloud Functions)
+    var likesCount: Int?
+    var commentsCount: Int?
+    
     enum RankingType: String, Codable {
         case artist
         case album

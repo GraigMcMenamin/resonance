@@ -542,7 +542,7 @@ exports.onRatingCreated = onDocumentWritten(
             if (artistName) {
               notificationBody += ` by ${artistName}`;
             }
-            notificationBody += ` (${percentage}%)`;
+            notificationBody += ` ${percentage}%`;
           } else {
             notificationBody = `${userDisplayName} rated ${itemName}`;
             if (artistName) {
@@ -1107,6 +1107,211 @@ exports.onCommentLikeDeleted = onDocumentDeleted(
       console.log(`Decremented likesCount for comment ${event.params.commentId}`);
     } catch (error) {
       console.error("Error decrementing comment likesCount:", error);
+    }
+  }
+);
+
+/**
+ * Cloud Function: Maintain comment count on rankings
+ *
+ * Triggered when a comment is added to a ranking's comments subcollection.
+ * Increments commentsCount on the parent ranking and notifies the ranking
+ * owner (unless they are the commenter) plus any @mentioned users.
+ */
+exports.onRankingCommentCreated = onDocumentCreated(
+  "rankings/{rankingId}/comments/{commentId}",
+  async (event) => {
+    try {
+      const rankingRef = event.data.ref.parent.parent;
+      await rankingRef.update({
+        commentsCount: admin.firestore.FieldValue.increment(1),
+      });
+      console.log(`Incremented commentsCount for ranking ${event.params.rankingId}`);
+
+      const commentData = event.data.data();
+      const rankingDoc = await rankingRef.get();
+      if (!rankingDoc.exists) return;
+
+      const rankingData = rankingDoc.data();
+      const rankingOwnerId = rankingData.userId;
+      const commenterId = commentData.userId;
+      const commenterName = commentData.username || "Someone";
+      const rankingName = rankingData.name || "your ranking";
+      const commentPreview = commentData.content && commentData.content.length > 50
+        ? commentData.content.substring(0, 50) + "..."
+        : commentData.content || "";
+
+      async function sendNotificationToUser(userId, notification, data) {
+        if (userId === commenterId) return; // Never notify self
+        const userDoc = await admin.firestore().collection("users").doc(userId).get();
+        if (!userDoc.exists) return;
+        const fcmTokens = userDoc.data().fcmTokens || [];
+        if (fcmTokens.length === 0) return;
+
+        await Promise.all(fcmTokens.map(async (token) => {
+          try {
+            await admin.messaging().send({
+              token,
+              notification,
+              data,
+              apns: {payload: {aps: {sound: "default"}}},
+            });
+          } catch (error) {
+            console.error(`Failed to send notification to token: ${error.message}`);
+            if (error.code === "messaging/invalid-registration-token" ||
+                error.code === "messaging/registration-token-not-registered") {
+              await admin.firestore().collection("users").doc(userId).update({
+                fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
+              });
+            }
+          }
+        }));
+      }
+
+      const baseData = {
+        rankingId: event.params.rankingId,
+        commentId: event.params.commentId,
+        itemName: rankingName,
+        commenterId: commenterId,
+      };
+
+      const notifiedUsers = new Set();
+
+      // Notify ranking owner (unless they are the commenter)
+      if (rankingOwnerId !== commenterId) {
+        await sendNotificationToUser(
+          rankingOwnerId,
+          {
+            title: "New Comment",
+            body: `${commenterName} commented on your ranking "${rankingName}": "${commentPreview}"`,
+          },
+          {type: "rankingComment", ...baseData}
+        );
+        await addMailboxNotification(rankingOwnerId, {
+          type: "comment",
+          actorId: commenterId,
+          actorUsername: commenterName,
+          rankingId: event.params.rankingId,
+          commentId: event.params.commentId,
+          itemName: rankingName,
+          preview: commentPreview,
+        });
+        notifiedUsers.add(rankingOwnerId);
+        console.log(`Comment notification sent to ranking owner ${rankingOwnerId}`);
+      }
+
+      // Notify @mentioned users
+      const content = commentData.content || "";
+      const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+      const mentionedUsernames = [];
+      let match;
+      while ((match = mentionRegex.exec(content)) !== null) {
+        const username = match[1].toLowerCase();
+        if (!mentionedUsernames.includes(username)) {
+          mentionedUsernames.push(username);
+        }
+      }
+
+      for (const username of mentionedUsernames) {
+        try {
+          const userQuery = await admin.firestore()
+            .collection("users")
+            .where("usernameLowercase", "==", username)
+            .limit(1)
+            .get();
+          if (!userQuery.empty) {
+            const mentionedUserId = userQuery.docs[0].id;
+            if (!notifiedUsers.has(mentionedUserId)) {
+              await sendNotificationToUser(
+                mentionedUserId,
+                {
+                  title: "You were mentioned",
+                  body: `${commenterName} mentioned you in a comment on the ranking "${rankingName}": "${commentPreview}"`,
+                },
+                {type: "mention", ...baseData}
+              );
+              if (mentionedUserId !== commenterId) {
+                await addMailboxNotification(mentionedUserId, {
+                  type: "mention",
+                  actorId: commenterId,
+                  actorUsername: commenterName,
+                  rankingId: event.params.rankingId,
+                  commentId: event.params.commentId,
+                  itemName: rankingName,
+                  preview: commentPreview,
+                });
+              }
+              notifiedUsers.add(mentionedUserId);
+              console.log(`Mention notification sent to @${username} (${mentionedUserId})`);
+            }
+          }
+        } catch (err) {
+          console.error(`Error sending mention notification for @${username}:`, err);
+        }
+      }
+    } catch (error) {
+      console.error("Error in onRankingCommentCreated:", error);
+    }
+  }
+);
+
+/**
+ * Cloud Function: Maintain comment count on rankings
+ *
+ * Triggered when a comment is removed from a ranking's comments subcollection.
+ * Decrements the commentsCount field on the parent ranking document.
+ */
+exports.onRankingCommentDeleted = onDocumentDeleted(
+  "rankings/{rankingId}/comments/{commentId}",
+  async (event) => {
+    try {
+      const rankingRef = event.data.ref.parent.parent;
+      await rankingRef.update({
+        commentsCount: admin.firestore.FieldValue.increment(-1),
+      });
+      console.log(`Decremented commentsCount for ranking ${event.params.rankingId}`);
+    } catch (error) {
+      console.error("Error decrementing commentsCount:", error);
+    }
+  }
+);
+
+/**
+ * Cloud Function: Maintain like count on ranking comments
+ *
+ * Triggered when a like is added to a ranking comment's likes subcollection.
+ */
+exports.onRankingCommentLikeCreated = onDocumentCreated(
+  "rankings/{rankingId}/comments/{commentId}/likes/{likeId}",
+  async (event) => {
+    try {
+      const commentRef = event.data.ref.parent.parent;
+      await commentRef.update({
+        likesCount: admin.firestore.FieldValue.increment(1),
+      });
+      console.log(`Incremented likesCount for ranking comment ${event.params.commentId}`);
+    } catch (error) {
+      console.error("Error incrementing ranking comment likesCount:", error);
+    }
+  }
+);
+
+/**
+ * Cloud Function: Maintain like count on ranking comments
+ *
+ * Triggered when a like is removed from a ranking comment's likes subcollection.
+ */
+exports.onRankingCommentLikeDeleted = onDocumentDeleted(
+  "rankings/{rankingId}/comments/{commentId}/likes/{likeId}",
+  async (event) => {
+    try {
+      const commentRef = event.data.ref.parent.parent;
+      await commentRef.update({
+        likesCount: admin.firestore.FieldValue.increment(-1),
+      });
+      console.log(`Decremented likesCount for ranking comment ${event.params.commentId}`);
+    } catch (error) {
+      console.error("Error decrementing ranking comment likesCount:", error);
     }
   }
 );

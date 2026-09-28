@@ -520,15 +520,23 @@ class FirebaseService: ObservableObject {
         _ = try await profileImageRef.putDataAsync(imageData, metadata: metadata)
         let downloadURL = try await profileImageRef.downloadURL()
         
-        let urlString = downloadURL.absoluteString
+        // Firebase Storage returns the same download token for a given path, so re-uploads to
+        // profile_images/{userId}.jpg produce an identical URL — append a cache-busting query
+        // param so AsyncImage/URLCache actually refetch the new bytes instead of showing stale
+        // cached image data until the app restarts.
+        let urlString = "\(downloadURL.absoluteString)&cb=\(Int(Date().timeIntervalSince1970))"
         
         // Update the user's customImageURL in Firestore
         try await db.collection("users").document(userId).updateData([
             "customImageURL": urlString
         ])
         
-        // Propagate new image to all existing ratings, reviews, comments, etc.
-        await propagateProfileImageUpdate(userId: userId, newImageURL: urlString)
+        // Propagate new image to all existing ratings, reviews, comments, etc. in the
+        // background — this can touch hundreds of documents and shouldn't block the UI
+        // from showing the new picture right away.
+        Task {
+            await propagateProfileImageUpdate(userId: userId, newImageURL: urlString)
+        }
         
         print("[FirebaseService] Profile image uploaded for user: \(userId)")
         return urlString
@@ -555,8 +563,11 @@ class FirebaseService: ObservableObject {
         let userDoc = try await db.collection("users").document(userId).getDocument()
         let spotifyImageURL = userDoc.data()?["imageURL"] as? String
         
-        // Propagate reverted image to all existing ratings, reviews, comments, etc.
-        await propagateProfileImageUpdate(userId: userId, newImageURL: spotifyImageURL)
+        // Propagate reverted image to all existing ratings, reviews, comments, etc. in the
+        // background so the UI reverts immediately.
+        Task {
+            await propagateProfileImageUpdate(userId: userId, newImageURL: spotifyImageURL)
+        }
         
         print("[FirebaseService] Custom profile image removed for user: \(userId)")
     }
@@ -1111,9 +1122,9 @@ class FirebaseService: ObservableObject {
         return snapshot.documents.count
     }
     
-    // MARK: - Review Like Operations (stored under ratings collection)
+    // MARK: - Review Like Operations (stored under ratings or rankings collection)
     
-    func likeReview(reviewId: String, user: AppUser) async throws {
+    func likeReview(reviewId: String, user: AppUser, collection: String = "ratings") async throws {
         let likeId = ReviewLike.makeId(reviewId: reviewId, userId: user.id)
         let like = ReviewLike(
             id: likeId,
@@ -1124,25 +1135,25 @@ class FirebaseService: ObservableObject {
             createdAt: Date()
         )
         
-        try db.collection("ratings")
+        try db.collection(collection)
             .document(reviewId)
             .collection("likes")
             .document(likeId)
             .setData(from: like)
     }
     
-    func unlikeReview(reviewId: String, userId: String) async throws {
+    func unlikeReview(reviewId: String, userId: String, collection: String = "ratings") async throws {
         let likeId = ReviewLike.makeId(reviewId: reviewId, userId: userId)
-        try await db.collection("ratings")
+        try await db.collection(collection)
             .document(reviewId)
             .collection("likes")
             .document(likeId)
             .delete()
     }
     
-    func hasUserLikedReview(reviewId: String, userId: String) async throws -> Bool {
+    func hasUserLikedReview(reviewId: String, userId: String, collection: String = "ratings") async throws -> Bool {
         let likeId = ReviewLike.makeId(reviewId: reviewId, userId: userId)
-        let document = try await db.collection("ratings")
+        let document = try await db.collection(collection)
             .document(reviewId)
             .collection("likes")
             .document(likeId)
@@ -1151,19 +1162,18 @@ class FirebaseService: ObservableObject {
         return document.exists
     }
     
-    func getReviewLikesCount(reviewId: String) async throws -> Int {
+    func getReviewLikesCount(reviewId: String, collection: String = "ratings") async throws -> Int {
         // First try to get from the cached count field
-        let ratingDoc = try await db.collection("ratings")
+        let parentDoc = try await db.collection(collection)
             .document(reviewId)
             .getDocument()
         
-        if let rating = try? ratingDoc.data(as: UserRating.self),
-           let likesCount = rating.likesCount {
+        if let likesCount = parentDoc.data()?["likesCount"] as? Int {
             return likesCount
         }
         
         // Fallback to count aggregation query
-        let query = db.collection("ratings")
+        let query = db.collection(collection)
             .document(reviewId)
             .collection("likes")
         
@@ -1171,8 +1181,8 @@ class FirebaseService: ObservableObject {
         return Int(snapshot.count.intValue)
     }
     
-    func getReviewLikes(reviewId: String) async throws -> [ReviewLike] {
-        let snapshot = try await db.collection("ratings")
+    func getReviewLikes(reviewId: String, collection: String = "ratings") async throws -> [ReviewLike] {
+        let snapshot = try await db.collection(collection)
             .document(reviewId)
             .collection("likes")
             .order(by: "createdAt", descending: true)
@@ -1183,9 +1193,9 @@ class FirebaseService: ObservableObject {
         }
     }
     
-    // MARK: - Review Comment Operations (stored under ratings collection)
+    // MARK: - Review Comment Operations (stored under ratings or rankings collection)
     
-    func addComment(to reviewId: String, content: String, user: AppUser, replyToCommentId: String? = nil, replyToUsername: String? = nil) async throws -> ReviewComment {
+    func addComment(to reviewId: String, content: String, user: AppUser, replyToCommentId: String? = nil, replyToUsername: String? = nil, collection: String = "ratings") async throws -> ReviewComment {
         let commentId = UUID().uuidString
         var comment = ReviewComment(
             id: commentId,
@@ -1199,7 +1209,7 @@ class FirebaseService: ObservableObject {
         comment.replyToCommentId = replyToCommentId
         comment.replyToUsername = replyToUsername
         
-        try db.collection("ratings")
+        try db.collection(collection)
             .document(reviewId)
             .collection("comments")
             .document(commentId)
@@ -1217,16 +1227,16 @@ class FirebaseService: ObservableObject {
         return snapshot.documents.first.flatMap { try? $0.data(as: AppUser.self) }
     }
     
-    func deleteComment(reviewId: String, commentId: String) async throws {
-        try await db.collection("ratings")
+    func deleteComment(reviewId: String, commentId: String, collection: String = "ratings") async throws {
+        try await db.collection(collection)
             .document(reviewId)
             .collection("comments")
             .document(commentId)
             .delete()
     }
     
-    func getReviewComments(reviewId: String) async throws -> [ReviewComment] {
-        let snapshot = try await db.collection("ratings")
+    func getReviewComments(reviewId: String, collection: String = "ratings") async throws -> [ReviewComment] {
+        let snapshot = try await db.collection(collection)
             .document(reviewId)
             .collection("comments")
             .order(by: "createdAt", descending: false)
@@ -1237,19 +1247,18 @@ class FirebaseService: ObservableObject {
         }
     }
     
-    func getReviewCommentsCount(reviewId: String) async throws -> Int {
+    func getReviewCommentsCount(reviewId: String, collection: String = "ratings") async throws -> Int {
         // First try to get from the cached count field
-        let ratingDoc = try await db.collection("ratings")
+        let parentDoc = try await db.collection(collection)
             .document(reviewId)
             .getDocument()
         
-        if let rating = try? ratingDoc.data(as: UserRating.self),
-           let commentsCount = rating.commentsCount {
+        if let commentsCount = parentDoc.data()?["commentsCount"] as? Int {
             return commentsCount
         }
         
         // Fallback to count aggregation query
-        let query = db.collection("ratings")
+        let query = db.collection(collection)
             .document(reviewId)
             .collection("comments")
         
@@ -1257,9 +1266,9 @@ class FirebaseService: ObservableObject {
         return Int(snapshot.count.intValue)
     }
     
-    // MARK: - Comment Like Operations (stored under ratings collection)
+    // MARK: - Comment Like Operations (stored under ratings or rankings collection)
     
-    func likeComment(reviewId: String, commentId: String, user: AppUser) async throws {
+    func likeComment(reviewId: String, commentId: String, user: AppUser, collection: String = "ratings") async throws {
         let likeId = CommentLike.makeId(commentId: commentId, userId: user.id)
         let like = CommentLike(
             id: likeId,
@@ -1270,7 +1279,7 @@ class FirebaseService: ObservableObject {
             createdAt: Date()
         )
         
-        try db.collection("ratings")
+        try db.collection(collection)
             .document(reviewId)
             .collection("comments")
             .document(commentId)
@@ -1279,9 +1288,9 @@ class FirebaseService: ObservableObject {
             .setData(from: like)
     }
     
-    func unlikeComment(reviewId: String, commentId: String, userId: String) async throws {
+    func unlikeComment(reviewId: String, commentId: String, userId: String, collection: String = "ratings") async throws {
         let likeId = CommentLike.makeId(commentId: commentId, userId: userId)
-        try await db.collection("ratings")
+        try await db.collection(collection)
             .document(reviewId)
             .collection("comments")
             .document(commentId)
@@ -1290,9 +1299,9 @@ class FirebaseService: ObservableObject {
             .delete()
     }
     
-    func hasUserLikedComment(reviewId: String, commentId: String, userId: String) async throws -> Bool {
+    func hasUserLikedComment(reviewId: String, commentId: String, userId: String, collection: String = "ratings") async throws -> Bool {
         let likeId = CommentLike.makeId(commentId: commentId, userId: userId)
-        let document = try await db.collection("ratings")
+        let document = try await db.collection(collection)
             .document(reviewId)
             .collection("comments")
             .document(commentId)
@@ -1303,21 +1312,20 @@ class FirebaseService: ObservableObject {
         return document.exists
     }
     
-    func getCommentLikesCount(reviewId: String, commentId: String) async throws -> Int {
+    func getCommentLikesCount(reviewId: String, commentId: String, collection: String = "ratings") async throws -> Int {
         // First try to get from the cached count field
-        let commentDoc = try await db.collection("ratings")
+        let commentDoc = try await db.collection(collection)
             .document(reviewId)
             .collection("comments")
             .document(commentId)
             .getDocument()
         
-        if let comment = try? commentDoc.data(as: ReviewComment.self),
-           let likesCount = comment.likesCount {
+        if let likesCount = commentDoc.data()?["likesCount"] as? Int {
             return likesCount
         }
         
         // Fallback to count aggregation query
-        let query = db.collection("ratings")
+        let query = db.collection(collection)
             .document(reviewId)
             .collection("comments")
             .document(commentId)

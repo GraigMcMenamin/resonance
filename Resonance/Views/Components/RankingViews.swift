@@ -294,7 +294,8 @@ struct RankingFeedRow: View {
                         },
                         onReply: { _ in },
                         onUserTap: handleCommentUserTap,
-                        largerIcons: true
+                        largerIcons: true,
+                        collection: "rankings"
                     )
                     .environmentObject(authManager)
                     .environmentObject(firebaseService)
@@ -342,13 +343,13 @@ struct RankingFeedRow: View {
     
     private func loadInteractions() async {
         do {
-            likesCount = try await firebaseService.getReviewLikesCount(reviewId: ranking.id)
+            likesCount = try await firebaseService.getReviewLikesCount(reviewId: ranking.id, collection: "rankings")
             
             if let userId = authManager.currentUser?.id {
-                isLiked = try await firebaseService.hasUserLikedReview(reviewId: ranking.id, userId: userId)
+                isLiked = try await firebaseService.hasUserLikedReview(reviewId: ranking.id, userId: userId, collection: "rankings")
             }
             
-            commentsCount = try await firebaseService.getReviewCommentsCount(reviewId: ranking.id)
+            commentsCount = try await firebaseService.getReviewCommentsCount(reviewId: ranking.id, collection: "rankings")
         } catch {
             print("Error loading interactions: \(error)")
         }
@@ -358,10 +359,10 @@ struct RankingFeedRow: View {
         guard !hasLoadedComments else { return }
         hasLoadedComments = true
         do {
-            comments = try await firebaseService.getReviewComments(reviewId: ranking.id)
+            comments = try await firebaseService.getReviewComments(reviewId: ranking.id, collection: "rankings")
             
             for comment in comments {
-                let count = try await firebaseService.getCommentLikesCount(reviewId: ranking.id, commentId: comment.id)
+                let count = try await firebaseService.getCommentLikesCount(reviewId: ranking.id, commentId: comment.id, collection: "rankings")
                 commentLikeCounts[comment.id] = count
             }
         } catch {
@@ -378,13 +379,13 @@ struct RankingFeedRow: View {
         Task {
             do {
                 if isLiked {
-                    try await firebaseService.unlikeReview(reviewId: ranking.id, userId: user.id)
+                    try await firebaseService.unlikeReview(reviewId: ranking.id, userId: user.id, collection: "rankings")
                     await MainActor.run {
                         isLiked = false
                         likesCount = max(0, likesCount - 1)
                     }
                 } else {
-                    try await firebaseService.likeReview(reviewId: ranking.id, user: user)
+                    try await firebaseService.likeReview(reviewId: ranking.id, user: user, collection: "rankings")
                     await MainActor.run {
                         isLiked = true
                         likesCount += 1
@@ -416,7 +417,8 @@ struct RankingFeedRow: View {
                 let comment = try await firebaseService.addComment(
                     to: ranking.id,
                     content: finalComment,
-                    user: user
+                    user: user,
+                    collection: "rankings"
                 )
                 await MainActor.run {
                     comments.append(comment)
@@ -442,7 +444,7 @@ struct RankingFeedRow: View {
     
     private func deleteComment(_ comment: ReviewComment) async {
         do {
-            try await firebaseService.deleteComment(reviewId: ranking.id, commentId: comment.id)
+            try await firebaseService.deleteComment(reviewId: ranking.id, commentId: comment.id, collection: "rankings")
             await MainActor.run {
                 comments.removeAll { $0.id == comment.id }
                 commentLikeCounts.removeValue(forKey: comment.id)
@@ -496,10 +498,22 @@ struct RankingDetailView: View {
     
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var rankingsManager: RankingsManager
+    @EnvironmentObject var firebaseService: FirebaseService
     @Environment(\.dismiss) var dismiss
     @State private var showingDeleteConfirmation = false
     @State private var showingEditRanking = false
     @State private var currentRanking: UserRanking
+    @State private var navigateToCommentUserId: String? = nil
+    
+    @State private var comments: [ReviewComment] = []
+    @State private var commentLikeCounts: [String: Int] = [:]
+    @State private var newCommentText = ""
+    @FocusState private var isCommentFieldFocused: Bool
+    @State private var isSubmittingComment = false
+    @State private var hasLoadedComments = false
+    @State private var sourceId = UUID()
+    
+    private let maxVisibleComments = 3
     
     init(ranking: UserRanking) {
         self.ranking = ranking
@@ -578,10 +592,84 @@ struct RankingDetailView: View {
                         }
                     }
                 }
+                
+                Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if authManager.currentUser != nil {
+                            HStack(spacing: 8) {
+                                TextField("Add a comment...", text: $newCommentText)
+                                    .textFieldStyle(PlainTextFieldStyle())
+                                    .padding(10)
+                                    .background(Color.white.opacity(0.1))
+                                    .cornerRadius(20)
+                                    .foregroundColor(.white)
+                                    .focused($isCommentFieldFocused)
+                                    .onChange(of: newCommentText) { newValue in
+                                        if newValue.count > 150 {
+                                            newCommentText = String(newValue.prefix(150))
+                                        }
+                                    }
+                                
+                                Button(action: submitComment) {
+                                    if isSubmittingComment {
+                                        ProgressView()
+                                            .scaleEffect(0.8)
+                                            .tint(.white)
+                                    } else {
+                                        Image(systemName: "arrow.up.circle.fill")
+                                            .font(.system(size: 28))
+                                            .foregroundColor(newCommentText.isEmpty ? .white.opacity(0.3) : Color(red: 0.4, green: 0.2, blue: 0.6))
+                                    }
+                                }
+                                .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmittingComment)
+                            }
+                        }
+                        
+                        if comments.isEmpty {
+                            Text("no comments yet")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        } else {
+                            ForEach(sortedComments) { comment in
+                                CommentRow(
+                                    comment: comment,
+                                    reviewId: currentRanking.id,
+                                    initialLikesCount: commentLikeCounts[comment.id] ?? 0,
+                                    onDelete: {
+                                        await deleteComment(comment)
+                                    },
+                                    onReply: { _ in },
+                                    onUserTap: handleCommentUserTap,
+                                    largerIcons: true,
+                                    collection: "rankings"
+                                )
+                                .environmentObject(authManager)
+                                .environmentObject(firebaseService)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    .listRowInsets(EdgeInsets())
+                    .padding(.horizontal)
+                    .listRowBackground(Color.black)
+                    .listRowSeparator(.hidden)
+                }
+                
+                NavigationLink(
+                    destination: BuddyProfileDestination(userId: navigateToCommentUserId ?? ""),
+                    isActive: Binding(
+                        get: { navigateToCommentUserId != nil },
+                        set: { if !$0 { navigateToCommentUserId = nil } }
+                    )
+                ) { EmptyView() }
+                .hidden()
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(Color.black)
+        }
+        .task {
+            await loadComments()
         }
         .navigationTitle("ranking")
         .navigationBarTitleDisplayMode(.inline)
@@ -616,6 +704,104 @@ struct RankingDetailView: View {
             }
         }) {
             CreateRankingView(rankingsManager: rankingsManager, existingRanking: currentRanking)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .reviewCommentAdded)) { note in
+            guard let payload = note.object as? ReviewCommentAddedPayload,
+                  payload.reviewId == currentRanking.id,
+                  payload.sourceId != sourceId else { return }
+            if !comments.contains(where: { $0.id == payload.comment.id }) {
+                comments.append(payload.comment)
+                commentLikeCounts[payload.comment.id] = 0
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .reviewCommentDeleted)) { note in
+            guard let payload = note.object as? ReviewCommentDeletedPayload,
+                  payload.reviewId == currentRanking.id,
+                  payload.sourceId != sourceId else { return }
+            comments.removeAll { $0.id == payload.commentId }
+            commentLikeCounts.removeValue(forKey: payload.commentId)
+        }
+    }
+    
+    private var sortedComments: [ReviewComment] {
+        comments.sorted { $0.createdAt > $1.createdAt }
+    }
+    
+    private func handleCommentUserTap(_ userId: String) {
+        if authManager.currentUser?.id == userId {
+            return
+        }
+        navigateToCommentUserId = userId
+    }
+    
+    private func loadComments() async {
+        guard !hasLoadedComments else { return }
+        hasLoadedComments = true
+        do {
+            comments = try await firebaseService.getReviewComments(reviewId: currentRanking.id, collection: "rankings")
+            
+            for comment in comments {
+                let count = try await firebaseService.getCommentLikesCount(reviewId: currentRanking.id, commentId: comment.id, collection: "rankings")
+                commentLikeCounts[comment.id] = count
+            }
+        } catch {
+            print("Error loading comments: \(error)")
+            hasLoadedComments = false // Allow retry on error
+        }
+    }
+    
+    private func submitComment() {
+        guard let user = authManager.currentUser else { return }
+        let trimmedComment = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedComment.isEmpty else { return }
+        
+        isCommentFieldFocused = false
+        
+        let finalComment = String(trimmedComment.prefix(150))
+        
+        isSubmittingComment = true
+        
+        Task {
+            do {
+                let comment = try await firebaseService.addComment(
+                    to: currentRanking.id,
+                    content: finalComment,
+                    user: user,
+                    collection: "rankings"
+                )
+                await MainActor.run {
+                    comments.append(comment)
+                    commentLikeCounts[comment.id] = 0
+                    newCommentText = ""
+                    isCommentFieldFocused = false
+                    NotificationCenter.default.post(
+                        name: .reviewCommentAdded,
+                        object: ReviewCommentAddedPayload(reviewId: currentRanking.id, comment: comment, sourceId: sourceId)
+                    )
+                }
+            } catch {
+                print("Error submitting comment: \(error)")
+            }
+            
+            await MainActor.run {
+                isSubmittingComment = false
+            }
+        }
+    }
+    
+    private func deleteComment(_ comment: ReviewComment) async {
+        do {
+            try await firebaseService.deleteComment(reviewId: currentRanking.id, commentId: comment.id, collection: "rankings")
+            await MainActor.run {
+                comments.removeAll { $0.id == comment.id }
+                commentLikeCounts.removeValue(forKey: comment.id)
+                NotificationCenter.default.post(
+                    name: .reviewCommentDeleted,
+                    object: ReviewCommentDeletedPayload(reviewId: currentRanking.id, commentId: comment.id, sourceId: sourceId)
+                )
+            }
+        } catch {
+            print("Error deleting comment: \(error)")
         }
     }
     

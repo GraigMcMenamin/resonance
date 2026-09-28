@@ -782,6 +782,7 @@ struct CommentRow: View {
     var onReply: ((ReviewComment) -> Void)? = nil
     var onUserTap: ((String) -> Void)? = nil
     var largerIcons: Bool = false
+    var collection: String = "ratings"
     
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
@@ -942,10 +943,10 @@ struct CommentRow: View {
     
     private func loadLikeStatus() async {
         do {
-            likesCount = try await firebaseService.getCommentLikesCount(reviewId: reviewId, commentId: comment.id)
+            likesCount = try await firebaseService.getCommentLikesCount(reviewId: reviewId, commentId: comment.id, collection: collection)
             
             if let userId = authManager.currentUser?.id {
-                isLiked = try await firebaseService.hasUserLikedComment(reviewId: reviewId, commentId: comment.id, userId: userId)
+                isLiked = try await firebaseService.hasUserLikedComment(reviewId: reviewId, commentId: comment.id, userId: userId, collection: collection)
             }
         } catch {
             print("Error loading comment like status: \(error)")
@@ -960,13 +961,13 @@ struct CommentRow: View {
         Task {
             do {
                 if isLiked {
-                    try await firebaseService.unlikeComment(reviewId: reviewId, commentId: comment.id, userId: user.id)
+                    try await firebaseService.unlikeComment(reviewId: reviewId, commentId: comment.id, userId: user.id, collection: collection)
                     await MainActor.run {
                         isLiked = false
                         likesCount = max(0, likesCount - 1)
                     }
                 } else {
-                    try await firebaseService.likeComment(reviewId: reviewId, commentId: comment.id, user: user)
+                    try await firebaseService.likeComment(reviewId: reviewId, commentId: comment.id, user: user, collection: collection)
                     await MainActor.run {
                         isLiked = true
                         likesCount += 1

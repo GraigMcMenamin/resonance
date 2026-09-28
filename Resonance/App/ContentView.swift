@@ -201,6 +201,7 @@ struct AuthenticatedView: View {
             selectedTab = 0
         case .profilePage:
             selectedTab = 4
+            notificationManager.profileResetID = UUID()
             notificationManager.pendingDeepLink = nil
         case .myRatings:
             // Switch to BuddyBoard tab; BuddyBoardView handles the section switch

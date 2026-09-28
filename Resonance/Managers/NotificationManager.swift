@@ -34,6 +34,10 @@ class NotificationManager: NSObject, ObservableObject {
     @Published var fcmToken: String?
     @Published var pendingRecommendationsCount: Int = 0
     @Published var pendingDeepLink: NotificationDeepLink?
+    /// Bumped whenever the user should be returned to the root of their own profile page
+    /// (e.g. tapping their own username elsewhere in the app), so ProfileView's NavigationView
+    /// resets even if it already has pushed views (like an artist/album/song detail) on its stack.
+    @Published var profileResetID = UUID()
     
     private var firebaseService: FirebaseService?
     private var buddyManager: BuddyManager?
