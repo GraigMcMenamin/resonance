@@ -33,6 +33,12 @@ service cloud.firestore {
         allow read, update, delete: if isOwner(userId);
         allow create: if false;
       }
+      
+      // Listen list subcollection - public read (visible on profiles), owner-only write
+      match /listenList/{itemId} {
+        allow read: if isAuthenticated();
+        allow write: if isOwner(userId);
+      }
     }
     
     // Ratings collection - users can read all ratings, but only create/update/delete their own

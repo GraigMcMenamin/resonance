@@ -797,6 +797,24 @@ struct UserRanking: Codable, Identifiable, Equatable {
     }
 }
 
+// MARK: - Listen List Model
+
+/// A private, per-user "meaning to listen to" entry — an artist, album, or track
+/// with an optional priority (1-10, higher = more eager) and the date it was added.
+/// Stored at users/{userId}/listenList/{itemId}.
+struct ListenListItem: Codable, Identifiable, Equatable {
+    var id: String { Self.makeId(spotifyId: spotifyId) }
+    let spotifyId: String
+    let type: UserRating.RatingType
+    let name: String
+    let artistName: String?
+    let imageURL: String?
+    var priority: Int? // 0-10, nil = no priority set
+    var dateAdded: Date
+
+    static func makeId(spotifyId: String) -> String { spotifyId }
+}
+
 // MARK: - Mailbox Notification Model
 
 /// A persisted notification (mention, like, or reply) shown in the Mailbox tab.

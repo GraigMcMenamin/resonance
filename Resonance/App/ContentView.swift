@@ -88,6 +88,7 @@ struct AuthenticatedView: View {
     @EnvironmentObject var mailboxManager: MailboxManager
     @StateObject private var ratingsManager: RatingsManager
     @StateObject private var rankingsManager: RankingsManager
+    @StateObject private var listenListManager = ListenListManager()
     @State private var selectedTab: Int = 0
     
     init(firebaseService: FirebaseService) {
@@ -135,6 +136,7 @@ struct AuthenticatedView: View {
             }
             .environmentObject(ratingsManager)
             .environmentObject(rankingsManager)
+            .environmentObject(listenListManager)
         }
         .onChange(of: notificationManager.pendingDeepLink) { deepLink in
             guard let deepLink = deepLink else { return }
@@ -153,11 +155,16 @@ struct AuthenticatedView: View {
             // Load user ratings when authenticated (not in guest mode)
             // Spotify ID = Firebase UID via custom token
             if !authManager.isGuestMode, let userId = authManager.currentUser?.id {
-                await ratingsManager.loadUserRatings(userId: userId)
+                // Set these up first (not gated behind ratings load) so a slow ratings fetch
+                // can't leave listenListManager/buddyManager/mailboxManager without a userId
+                // while the user is already interacting with the app.
                 buddyManager.initialize(firebaseService: firebaseService)
                 buddyManager.setUserId(userId)
                 mailboxManager.initialize(firebaseService: firebaseService)
                 mailboxManager.setUserId(userId)
+                listenListManager.initialize(firebaseService: firebaseService)
+                listenListManager.setUserId(userId)
+                await ratingsManager.loadUserRatings(userId: userId)
             } else if authManager.isGuestMode {
                 // Clear ratings in guest mode
                 ratingsManager.clearUserRatings()
@@ -167,14 +174,16 @@ struct AuthenticatedView: View {
             Task {
                 if let newUserId = newValue, !authManager.isGuestMode {
                     // User changed, load their ratings
-                    await ratingsManager.loadUserRatings(userId: newUserId)
                     buddyManager.setUserId(newUserId)
                     mailboxManager.setUserId(newUserId)
+                    listenListManager.setUserId(newUserId)
+                    await ratingsManager.loadUserRatings(userId: newUserId)
                 } else {
                     // User logged out or switched to guest
                     ratingsManager.clearUserRatings()
                     buddyManager.setUserId(nil)
                     mailboxManager.setUserId(nil)
+                    listenListManager.setUserId(nil)
                 }
             }
         }
@@ -208,6 +217,9 @@ struct AuthenticatedView: View {
             selectedTab = 0
         case .mailbox:
             selectedTab = 1
+            notificationManager.pendingDeepLink = nil
+        case .searchTab:
+            selectedTab = 3
             notificationManager.pendingDeepLink = nil
         }
     }

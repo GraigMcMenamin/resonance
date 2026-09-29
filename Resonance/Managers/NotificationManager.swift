@@ -26,6 +26,8 @@ enum NotificationDeepLink: Equatable {
     case myRatings
     /// Navigate to the mailbox tab (for recommendation and buddy request notifications)
     case mailbox
+    /// Navigate to the search tab (used by the listen list's empty state)
+    case searchTab
 }
 
 @MainActor

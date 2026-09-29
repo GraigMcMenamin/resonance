@@ -19,6 +19,7 @@ struct AlbumDetailView: View {
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var buddyManager: BuddyManager
     @EnvironmentObject var rankingsManager: RankingsManager
+    @EnvironmentObject var listenListManager: ListenListManager
     
     @State private var album: SpotifyAlbumFull?
     @State private var isLoading = true
@@ -29,6 +30,7 @@ struct AlbumDetailView: View {
     @State private var showSendSheet = false
     @State private var itemUserRating: UserRating?
     @State private var showRankAllSongsSheet = false
+    @State private var showAddToListenListSheet = false
     /// Track average ratings fetched locally — never writes to the global allRatings store.
     @State private var trackAverageRatings: [String: Double] = [:]
     
@@ -103,6 +105,16 @@ struct AlbumDetailView: View {
                 presetAlbumId: albumId,
                 presetAlbumName: album?.name ?? albumName
             )
+        }
+        .sheet(isPresented: $showAddToListenListSheet) {
+            AddToListenListSheet(
+                spotifyId: albumId,
+                type: .album,
+                name: album?.name ?? albumName,
+                artistName: album?.artistNames ?? artistName,
+                imageURL: album?.imageURL ?? imageURL
+            )
+            .environmentObject(listenListManager)
         }
         .task {
             if !spotifyService.isAuthenticated {
@@ -324,21 +336,42 @@ struct AlbumDetailView: View {
                 }
             }
             
-            // Rank All Songs Button
-            if let tracks = album?.tracks.items, !tracks.isEmpty {
-                Button(action: { showRankAllSongsSheet = true }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "list.number")
-                        Text("rank all songs")
+            // Add To Listen List / Rank All Songs Buttons
+            HStack(spacing: 10) {
+                Button(action: { showAddToListenListSheet = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: listenListManager.contains(spotifyId: albumId) ? "checkmark.circle" : "plus.circle")
+                        Text(listenListManager.contains(spotifyId: albumId) ? "on listen list" : "add to listen list")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                     }
-                    .font(.footnote)
+                    .font(.caption)
                     .foregroundColor(.white.opacity(0.8))
-                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                     .background(
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(Color.white.opacity(0.3), lineWidth: 1)
                     )
+                }
+                
+                if let tracks = album?.tracks.items, !tracks.isEmpty {
+                    Button(action: { showRankAllSongsSheet = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "list.number")
+                            Text("rank all songs")
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                        }
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                        )
+                    }
                 }
             }
             

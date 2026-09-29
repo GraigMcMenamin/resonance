@@ -17,6 +17,7 @@ struct ArtistDetailView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var buddyManager: BuddyManager
+    @EnvironmentObject var listenListManager: ListenListManager
     
     @State private var artist: SpotifyArtist?
     @State private var topTracks: [SpotifyTrack] = []
@@ -32,6 +33,7 @@ struct ArtistDetailView: View {
     /// Explicitly fetched averages for top tracks/albums — never writes to the global allRatings store.
     @State private var trackAverageRatings: [String: Double] = [:]
     @State private var albumAverageRatings: [String: Double] = [:]
+    @State private var showAddToListenListSheet = false
     
     var body: some View {
         ZStack {
@@ -97,6 +99,16 @@ struct ArtistDetailView: View {
             .environmentObject(firebaseService)
             .environmentObject(authManager)
             .environmentObject(buddyManager)
+        }
+        .sheet(isPresented: $showAddToListenListSheet) {
+            AddToListenListSheet(
+                spotifyId: artistId,
+                type: .artist,
+                name: artist?.name ?? artistName,
+                artistName: nil,
+                imageURL: artist?.imageURL ?? artistImageURL
+            )
+            .environmentObject(listenListManager)
         }
         .task {
             if !spotifyService.isAuthenticated {
@@ -258,6 +270,22 @@ struct ArtistDetailView: View {
                                 .stroke(Color.green.opacity(0.5), lineWidth: 1)
                         )
                 }
+            }
+            
+            // Add To Listen List Button
+            Button(action: { showAddToListenListSheet = true }) {
+                HStack(spacing: 6) {
+                    Image(systemName: listenListManager.contains(spotifyId: artistId) ? "checkmark.circle" : "plus.circle")
+                    Text(listenListManager.contains(spotifyId: artistId) ? "on listen list" : "add to listen list")
+                }
+                .font(.footnote)
+                .foregroundColor(.white.opacity(0.8))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                )
             }
             
             // Buddy Ratings Section

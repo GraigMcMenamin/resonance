@@ -252,6 +252,8 @@ struct BuddyBoardView: View {
             break
         case .mailbox:
             break
+        case .searchTab:
+            break
         case .myRatings:
             selectedSection = .myRatings
         }

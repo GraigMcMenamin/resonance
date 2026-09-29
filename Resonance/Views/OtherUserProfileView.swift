@@ -40,8 +40,11 @@ struct OtherUserProfileView: View {
                         // User Profile Header
                         userProfileHeader()
                         
-                        // See All Reviews / Buddies / Buddy Button
+                        // Buddies / See All Reviews / Listen List / Buddy Button
                         VStack(spacing: 8) {
+                        // Buddies Section
+                        buddiesSection()
+
                         // See All Reviews Button
                         NavigationLink(destination: OtherUserReviewsView(user: displayUser)) {
                             HStack {
@@ -72,8 +75,34 @@ struct OtherUserProfileView: View {
                         }
                         .buttonStyle(.plain)
 
-                        // Buddies Section
-                        buddiesSection()
+                        // Listen List Section
+                        NavigationLink(destination: OtherUserListenListView(userId: user.id, username: displayUser.username)) {
+                            HStack {
+                                Image(systemName: "music.note.list")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+
+                                Text("listen list")
+                                    .font(.title3)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+
+                                Spacer()
+
+                                Text("\(viewModel.listenListCount)")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.7))
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.3))
+                            }
+                            .padding(.vertical, 10)
+                            .padding(.horizontal)
+                            .background(Color.white.opacity(0.05))
+                            .cornerRadius(12)
+                        }
+                        .buttonStyle(.plain)
 
                         // Buddy Button
                         buddyActionSection()
@@ -747,6 +776,7 @@ class OtherUserProfileViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var averageRating: Double?
+    @Published var listenListCount: Int = 0
     
     private var firebaseService: FirebaseService!
     
@@ -797,6 +827,9 @@ class OtherUserProfileViewModel: ObservableObject {
             errorMessage = "Failed to load user profile"
             isLoading = false
         }
+
+        // Loaded separately since it must not fail the rest of the profile if it errors
+        listenListCount = (try? await firebaseService.getListenList(userId: userId))?.count ?? 0
     }
     
     func loadBuddies(userId: String) async {

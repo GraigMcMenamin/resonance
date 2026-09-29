@@ -1494,6 +1494,39 @@ class FirebaseService: ObservableObject {
             .delete()
     }
     
+    // MARK: - Listen List CRUD Operations (private, per-user)
+
+    /// Get a user's listen list items, newest first
+    func getListenList(userId: String) async throws -> [ListenListItem] {
+        let snapshot = try await db.collection("users")
+            .document(userId)
+            .collection("listenList")
+            .order(by: "dateAdded", descending: true)
+            .getDocuments()
+
+        return snapshot.documents.compactMap { doc in
+            try? doc.data(as: ListenListItem.self)
+        }
+    }
+
+    /// Add or update a listen list item (document id = spotifyId)
+    func saveListenListItem(_ item: ListenListItem, userId: String) async throws {
+        try db.collection("users")
+            .document(userId)
+            .collection("listenList")
+            .document(item.id)
+            .setData(from: item)
+    }
+
+    /// Remove an item from the listen list
+    func deleteListenListItem(spotifyId: String, userId: String) async throws {
+        try await db.collection("users")
+            .document(userId)
+            .collection("listenList")
+            .document(spotifyId)
+            .delete()
+    }
+
     // MARK: - FCM Token Management
     
     /// Save an FCM token for push notifications

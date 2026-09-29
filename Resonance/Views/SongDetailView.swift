@@ -21,6 +21,7 @@ struct SongDetailView: View {
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var buddyManager: BuddyManager
     @EnvironmentObject var rankingsManager: RankingsManager
+    @EnvironmentObject var listenListManager: ListenListManager
     
     @State private var track: SpotifyTrack?
     @State private var isLoading = true
@@ -30,6 +31,7 @@ struct SongDetailView: View {
     @State private var buddyRatings: [UserRating] = []
     @State private var showSendSheet = false
     @State private var showAddToRankingSheet = false
+    @State private var showAddToListenListSheet = false
     @State private var itemUserRating: UserRating?
     /// Explicitly fetched album average — never writes to the global allRatings store.
     @State private var albumAverageRating: Double?
@@ -108,6 +110,16 @@ struct SongDetailView: View {
             .environmentObject(rankingsManager)
             .environmentObject(authManager)
             .environmentObject(spotifyService)
+        }
+        .sheet(isPresented: $showAddToListenListSheet) {
+            AddToListenListSheet(
+                spotifyId: trackId,
+                type: .track,
+                name: track?.name ?? trackName,
+                artistName: track?.artistNames ?? artistName,
+                imageURL: track?.imageURL ?? imageURL
+            )
+            .environmentObject(listenListManager)
         }
         .task {
             if !spotifyService.isAuthenticated {
@@ -307,20 +319,41 @@ struct SongDetailView: View {
                 }
             }
             
-            // Add To Ranking Button
-            Button(action: { showAddToRankingSheet = true }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "list.number")
-                    Text("add to a ranking")
+            // Add To Listen List / Add To Ranking Buttons
+            HStack(spacing: 10) {
+                Button(action: { showAddToListenListSheet = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: listenListManager.contains(spotifyId: trackId) ? "checkmark.circle" : "plus.circle")
+                        Text(listenListManager.contains(spotifyId: trackId) ? "on listen list" : "add to listen list")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.8))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                    )
                 }
-                .font(.footnote)
-                .foregroundColor(.white.opacity(0.8))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                )
+                
+                Button(action: { showAddToRankingSheet = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "list.number")
+                        Text("add to a ranking")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.8))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                    )
+                }
             }
             
             // Buddy Ratings Section

@@ -16,6 +16,7 @@ struct ProfileView: View {
     @EnvironmentObject var buddyManager: BuddyManager
     @EnvironmentObject var spotifyService: SpotifyService
     @EnvironmentObject var notificationManager: NotificationManager
+    @EnvironmentObject var listenListManager: ListenListManager
     @StateObject private var viewModel = ProfileViewModel()
     @State private var selectedPickerType: TopItemType?
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -87,6 +88,35 @@ struct ProfileView: View {
                                     Spacer()
 
                                     Text("\(ratingsManager.totalRatingsCount)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.white.opacity(0.7))
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.3))
+                                }
+                                .padding(.vertical, 10)
+                                .padding(.horizontal)
+                                .background(Color.white.opacity(0.05))
+                                .cornerRadius(12)
+                            }
+                            .buttonStyle(.plain)
+
+                            // Listen List Button
+                            NavigationLink(destination: ListenListView()) {
+                                HStack {
+                                    Image(systemName: "music.note.list")
+                                        .font(.title2)
+                                        .foregroundColor(.white)
+
+                                    Text("listen list")
+                                        .font(.title3)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+
+                                    Spacer()
+
+                                    Text("\(listenListManager.items.count)")
                                         .font(.subheadline)
                                         .foregroundColor(.white.opacity(0.7))
 
