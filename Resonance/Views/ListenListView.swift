@@ -70,25 +70,23 @@ struct ListenListView: View {
         }
         .task { await listenListManager.refresh() }
         .refreshable { await listenListManager.refresh() }
-        .confirmationDialog(
+        .alert(
             "Review \(itemPendingReviewPrompt?.name ?? "this")?",
-            isPresented: Binding(get: { itemPendingReviewPrompt != nil }, set: { if !$0 { itemPendingReviewPrompt = nil } }),
-            titleVisibility: .visible
+            isPresented: Binding(get: { itemPendingReviewPrompt != nil }, set: { if !$0 { itemPendingReviewPrompt = nil } })
         ) {
-            Button("review it") {
+            Button("yes") {
                 if let item = itemPendingReviewPrompt {
                     selectedRatableItem = ratableItem(for: item)
                     Task { await listenListManager.remove(spotifyId: item.spotifyId) }
                 }
                 itemPendingReviewPrompt = nil
             }
-            Button("not now") {
+            Button("no") {
                 if let item = itemPendingReviewPrompt {
                     Task { await listenListManager.remove(spotifyId: item.spotifyId) }
                 }
                 itemPendingReviewPrompt = nil
             }
-            Button("cancel", role: .cancel) { itemPendingReviewPrompt = nil }
         }
         .sheet(item: $selectedRatableItem) { item in
             RatingSheet(item: item, ratingsManager: ratingsManager)

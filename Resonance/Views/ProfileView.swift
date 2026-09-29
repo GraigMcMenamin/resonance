@@ -80,7 +80,7 @@ struct ProfileView: View {
                                         .scaledToFit()
                                         .frame(width: 28, height: 28)
 
-                                    Text("my ratings")
+                                    Text("my reviews")
                                         .font(.title3)
                                         .fontWeight(.semibold)
                                         .foregroundColor(.white)
