@@ -19,8 +19,13 @@ struct ListenListView: View {
     @EnvironmentObject var notificationManager: NotificationManager
 
     @State private var filter: ListenListManager.Filter = .all
-    @State private var sort: ListenListManager.SortOrder = .dateAdded
+    @AppStorage("listenListSortOrder") private var sortRawValue: String = ListenListManager.SortOrder.dateAdded.rawValue
     @State private var itemPendingReviewPrompt: ListenListItem?
+
+    private var sort: ListenListManager.SortOrder {
+        get { ListenListManager.SortOrder(rawValue: sortRawValue) ?? .dateAdded }
+        nonmutating set { sortRawValue = newValue.rawValue }
+    }
     @State private var selectedRatableItem: RatableItem?
 
     private var displayedItems: [ListenListItem] {
@@ -146,7 +151,7 @@ struct ListenListView: View {
 
     private var sortMenu: some View {
         Menu {
-            Picker("sort", selection: $sort) {
+            Picker("sort", selection: Binding(get: { sort }, set: { sort = $0 })) {
                 ForEach(ListenListManager.SortOrder.allCases, id: \.self) { s in
                     Text(s.rawValue).tag(s)
                 }
