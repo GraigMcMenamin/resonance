@@ -335,25 +335,19 @@ struct ReviewCard: View {
                 .foregroundColor(.white.opacity(0.9))
             }
             
-            if review.dateUpdated != nil {
-                Text("edited")
-                    .font(.caption2)
-                    .foregroundColor(.white.opacity(0.4))
-            }
-            
             Divider()
                 .background(Color.white.opacity(0.1))
             
-            HStack(spacing: 24) {
+            HStack(spacing: 16) {
                 Button(action: toggleLike) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         Image(systemName: isLiked ? "heart.fill" : "heart")
-                            .font(.system(size: 18))
+                            .font(.system(size: 14))
                             .foregroundColor(isLiked ? .red : .white.opacity(0.6))
                         
                         if likesCount > 0 {
                             Text("\(likesCount)")
-                                .font(.subheadline)
+                                .font(.caption)
                                 .foregroundColor(.white.opacity(0.6))
                         }
                     }
@@ -368,17 +362,23 @@ struct ReviewCard: View {
                         }
                     }
                 }) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         Image(systemName: "bubble.right")
-                            .font(.system(size: 18))
+                            .font(.system(size: 14))
                             .foregroundColor(.white.opacity(0.6))
                         
                         if commentsCount > 0 {
                             Text("\(commentsCount)")
-                                .font(.subheadline)
+                                .font(.caption)
                                 .foregroundColor(.white.opacity(0.6))
                         }
                     }
+                }
+                
+                if review.dateUpdated != nil {
+                    Text("(edited)")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.4))
                 }
                 
                 Spacer()
@@ -386,12 +386,12 @@ struct ReviewCard: View {
                 if isOwnReview, onDelete != nil {
                     Button(action: { showDeleteConfirmation = true }) {
                         Image(systemName: "trash")
-                            .font(.system(size: 16))
+                            .font(.system(size: 14))
                             .foregroundColor(.white.opacity(0.4))
                     }
                 }
             }
-            .padding(.top, 4)
+            .padding(.top, 2)
             
             if showComments {
                 commentsSection

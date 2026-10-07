@@ -836,7 +836,7 @@ struct RatingRow: View {
             if rating.hasReviewContent, let content = rating.reviewContent {
                 let reviewLabel = HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(rating.type == .artist ? "artist" : rating.type == .album ? "album" : "song") review:")
+                        Text("\(rating.type == .artist ? "artist" : rating.type == .album ? "album" : "song") review\(rating.reviewDateUpdated != nil ? " (edited)" : ""):")
                             .font(.caption)
                             .fontWeight(.medium)
                             .foregroundColor(.secondary)
@@ -864,13 +864,6 @@ struct RatingRow: View {
                     .buttonStyle(.borderless)
                 } else {
                     reviewLabel
-                }
-                
-                if rating.reviewDateUpdated != nil {
-                    Text("edited")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .padding(.leading, 72)
                 }
             }
         }
@@ -1160,7 +1153,7 @@ struct LibraryBuddyRatingRow: View {
             if rating.hasReviewContent, let content = rating.reviewContent {
                 Button(action: { navigateToReviews = true }) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(rating.type == .artist ? "artist" : rating.type == .album ? "album" : "song") review:")
+                        Text("\(rating.type == .artist ? "artist" : rating.type == .album ? "album" : "song") review\(rating.reviewDateUpdated != nil ? " (edited)" : ""):")
                             .font(.caption)
                             .fontWeight(.medium)
                             .foregroundColor(.secondary)
@@ -1194,13 +1187,6 @@ struct LibraryBuddyRatingRow: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 4)
-                
-                if rating.reviewDateUpdated != nil {
-                    Text("edited")
-                        .font(.caption2)
-                        .foregroundColor(.white.opacity(0.4))
-                        .padding(.top, 2)
-                }
             }
             
             // Like and Comment buttons on bottom right

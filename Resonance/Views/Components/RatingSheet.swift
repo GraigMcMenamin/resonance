@@ -584,6 +584,13 @@ struct RatingSheet: View {
         let trimmedContent = reviewContent.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasReview = !trimmedContent.isEmpty
         
+        let previous = ratingsManager.getRating(for: UserRating.makeId(userId: user.id, spotifyId: item.id))
+        let didChange = previous.map {
+            $0.percentage != Int(percentage) || ($0.reviewContent ?? "") != trimmedContent
+        } ?? false
+        let previouslyEdited = previous?.reviewDateUpdated ?? existingReview?.dateUpdated
+        let editedDate: Date? = hasReview ? (didChange ? Date() : previouslyEdited) : nil
+        
         // Create the rating with optional review content embedded
         var rating = UserRating(
             id: UserRating.makeId(userId: user.id, spotifyId: item.id),
@@ -598,8 +605,8 @@ struct RatingSheet: View {
             username: user.username,
             userImageURL: user.displayImageURL,
             reviewContent: hasReview ? trimmedContent : nil,
-            reviewDateCreated: hasReview ? (existingReview?.dateCreated ?? Date()) : nil,
-            reviewDateUpdated: (hasReview && existingReview != nil) ? Date() : nil
+            reviewDateCreated: hasReview ? (previous?.reviewDateCreated ?? existingReview?.dateCreated ?? Date()) : nil,
+            reviewDateUpdated: editedDate
         )
         
         do {
