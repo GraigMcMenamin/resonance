@@ -222,7 +222,8 @@ struct RankingFeedRow: View {
                 commentsSection
             }
         }
-        .padding(.vertical, 8)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
         .padding(.horizontal)
         .task {
             guard !hasLoadedInteractions else { return }

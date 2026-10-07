@@ -259,8 +259,17 @@ struct BuddyBoardView: View {
         }
     }
     
+    // Drawn manually instead of relying on List's separator, which can render at inconsistent widths across mixed row types.
+    // Uses a full point of height rather than a sub-pixel value, since 0.5pt hairlines anti-alias
+    // inconsistently depending on each row's fractional y-position, making some look thinner than others.
+    private var feedRowDivider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.15))
+            .frame(height: 1)
+    }
+
     // MARK: - My Board Section
-    
+
     private var myRatingsSection: some View {
         VStack(spacing: 0) {
             // Filter Picker
@@ -426,6 +435,8 @@ struct BuddyBoardView: View {
                                     autoExpandForCommentId: deepLinkExpandCommentRatingId == rating.id ? deepLinkScrollToCommentId : nil
                                 )
                                 .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .overlay(feedRowDivider, alignment: .bottom)
                                 .id(item.id)
                             case .recommendation(let rec, let receiverRating):
                                 RecommendationFeedRow(
@@ -434,10 +445,14 @@ struct BuddyBoardView: View {
                                     currentUserId: authManager.currentUser?.id
                                 )
                                 .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .overlay(feedRowDivider, alignment: .bottom)
                                 .id(item.id)
                             case .ranking(let ranking):
                                 RankingFeedRow(ranking: ranking)
                                     .listRowInsets(EdgeInsets())
+                                    .listRowSeparator(.hidden)
+                                    .overlay(feedRowDivider, alignment: .bottom)
                                     .id(item.id)
                             }
                         }
@@ -1240,7 +1255,8 @@ struct LibraryBuddyRatingRow: View {
                     .frame(height: CGFloat(min(commentsCount, maxVisibleComments)) * 56)
             }
         }
-        .padding(.vertical, 8)
+        .padding(.top, 0)
+        .padding(.bottom, 8)
         .padding(.horizontal)
         .task {
             guard !hasLoadedInteractions else { return }
@@ -1834,7 +1850,8 @@ struct RecommendationFeedRow: View {
             .hidden()
             .frame(width: 0, height: 0)
         }
-        .padding(.vertical, 8)
+        .padding(.top, 16)
+        .padding(.bottom, 8)
         .padding(.horizontal)
     }
     
