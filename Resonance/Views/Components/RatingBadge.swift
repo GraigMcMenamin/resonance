@@ -168,6 +168,7 @@ struct BuddyRatingsSection: View {
     var artistName: String? = nil
     var imageURL: URL? = nil
     var reviewType: Review.ReviewType = .track
+    var showHeader: Bool = true
     @State private var showAllRatings = false
     
     /// Whether there's anything to show (user's own rating or buddy ratings)
@@ -209,11 +210,13 @@ struct BuddyRatingsSection: View {
     var body: some View {
         if hasAnyRatings {
             VStack(alignment: .leading, spacing: 12) {
-                Text("ratings")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white.opacity(0.6))
-                    .textCase(.lowercase)
+                if showHeader {
+                    Text("ratings")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white.opacity(0.6))
+                        .textCase(.lowercase)
+                }
                 
                 VStack(spacing: 8) {
                     // User's own rating first

@@ -59,7 +59,7 @@ struct AlbumDetailView: View {
                 .padding()
             } else {
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 14) {
                         // Album Header
                         albumHeader
                         
@@ -80,7 +80,7 @@ struct AlbumDetailView: View {
                 }
             }
         }
-        .navigationTitle(albumName)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedItem) { item in
             RatingSheet(item: item, ratingsManager: ratingsManager)
@@ -132,7 +132,7 @@ struct AlbumDetailView: View {
     // MARK: - Album Header
     
     private var albumHeader: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 10) {
             // Album Art - edge to edge with small padding
             GeometryReader { geometry in
                 CustomAsyncImage(url: album?.imageURL ?? imageURL) { phase in
@@ -166,112 +166,55 @@ struct AlbumDetailView: View {
                 }
             }
             .aspectRatio(1, contentMode: .fit)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 40)
             
-            // Album Name
-            Text(album?.name ?? albumName)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
-            
-            // Artists
-            if let artists = album?.artists {
-                VStack(spacing: 8) {
-                    ForEach(artists, id: \.id) { artist in
-                        NavigationLink(destination: ArtistDetailView(
-                            artistId: artist.id,
-                            artistName: artist.name,
-                            artistImageURL: nil
-                        )) {
-                            HStack(spacing: 6) {
-                                Text(artist.name)
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white.opacity(0.8))
-                                
-                                if let average = ratingsManager.getAverageRating(for: artist.id) {
-                                    Text("\(Int(average))%")
-                                        .font(.caption)
-                                        .foregroundColor(.white.opacity(0.5))
-                                }
-                                
-                                Image(systemName: "chevron.right")
-                                    .font(.caption2)
-                                    .foregroundColor(.white.opacity(0.4))
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.top, 8)
+            HStack(alignment: .top, spacing: 12) {
+                TitleArtistHeader(
+                    title: album?.name ?? albumName,
+                    artists: album?.artists ?? [],
+                    ratingsManager: ratingsManager
+                )
+                playButton
             }
-            
-            // Release Year & Track Count
-            HStack(spacing: 12) {
-                if let year = album?.releaseYear {
-                    Text(year)
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                
-                if let trackCount = album?.totalTracks {
-                    Text("•")
-                        .foregroundColor(.white.opacity(0.5))
-                    Text("\(trackCount) tracks")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
-                }
-            }
+            .padding(.top, 12)
         }
-        .padding(.top, 20)
+        .padding(.top, 8)
         .padding(.horizontal)
+    }
+    
+    // Open in Spotify
+    private var playButton: some View {
+        Button(action: {
+            if let uri = SpotifyService.spotifyURI(type: "album", id: albumId),
+               UIApplication.shared.canOpenURL(uri) {
+                UIApplication.shared.open(uri)
+            } else if let webURL = SpotifyService.spotifyWebURL(type: "album", id: albumId) {
+                UIApplication.shared.open(webURL)
+            }
+        }) {
+            Image(systemName: "play.circle.fill")
+                .font(.largeTitle)
+                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+        }
     }
     
     // MARK: - Rating Section
     
     private var ratingSection: some View {
-        VStack(spacing: 20) {
-            // Average Rating Display
+        VStack(alignment: .leading, spacing: 12) {
+            // Average rating (hidden entirely when there is none)
             if let average = ratingsManager.getAverageRating(for: albumId) {
-                HStack(spacing: 12) {
-                    Text("average")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.6))
-                    Text("\(Int(average))%")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
+                HStack(spacing: 8) {
                     RatingBar(percentage: average)
-                        .frame(width: 120, height: 8)
+                        .frame(width: 100, height: 8)
+                    Text("\(Int(average))%")
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
                 }
             }
             
-            // Rate & Review and Reviews Buttons
-            HStack(spacing: 12) {
-                Button(action: {
-                    if let album = album {
-                        selectedItem = .album(SpotifyAlbum(
-                            id: album.id,
-                            name: album.name,
-                            artists: album.artists,
-                            images: album.images,
-                            releaseDate: album.releaseDate,
-                            totalTracks: album.totalTracks
-                        ))
-                    }
-                }) {
-                    Text(hasUserRating ? "edit review" : "review")
-                    .font(.footnote)
-                    .lineLimit(1)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Color(red: 0.6, green: 0.4, blue: 0.8))
-                    .cornerRadius(20)
-                }
-                .disabled(album == nil)
-                
+            // Reviews, Send (left) and review button (right)
+            HStack(spacing: 28) {
                 NavigationLink(destination: ReviewsListView(
                     spotifyId: albumId,
                     itemName: album?.name ?? albumName,
@@ -286,12 +229,6 @@ struct AlbumDetailView: View {
                     }
                     .font(.footnote)
                     .foregroundColor(.white.opacity(0.8))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                    )
                 }
                 
                 // Send to Buddy Button
@@ -306,53 +243,45 @@ struct AlbumDetailView: View {
                         }
                         .font(.footnote)
                         .foregroundColor(.white.opacity(0.8))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                        )
                     }
                 }
                 
-                // Open in Spotify
+                Spacer(minLength: 8)
+                
                 Button(action: {
-                    if let uri = SpotifyService.spotifyURI(type: "album", id: albumId),
-                       UIApplication.shared.canOpenURL(uri) {
-                        UIApplication.shared.open(uri)
-                    } else if let webURL = SpotifyService.spotifyWebURL(type: "album", id: albumId) {
-                        UIApplication.shared.open(webURL)
+                    if let album = album {
+                        selectedItem = .album(SpotifyAlbum(
+                            id: album.id,
+                            name: album.name,
+                            artists: album.artists,
+                            images: album.images,
+                            releaseDate: album.releaseDate,
+                            totalTracks: album.totalTracks
+                        ))
                     }
                 }) {
-                    Image(systemName: "play.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.green)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.green.opacity(0.5), lineWidth: 1)
-                        )
+                    Text(hasUserRating ? "edit review" : "review")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 9)
+                    .background(Color(red: 0.6, green: 0.4, blue: 0.8))
+                    .cornerRadius(20)
                 }
+                .disabled(album == nil)
             }
             
             // Add To Listen List / Rank All Songs Buttons
-            HStack(spacing: 10) {
+            HStack(spacing: 28) {
                 Button(action: { showAddToListenListSheet = true }) {
                     HStack(spacing: 4) {
                         Image(systemName: listenListManager.contains(spotifyId: albumId) ? "checkmark.circle" : "plus.circle")
                         Text(listenListManager.contains(spotifyId: albumId) ? "on listen list" : "add to listen list")
                             .lineLimit(1)
-                            .minimumScaleFactor(0.75)
                     }
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.8))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                    )
                 }
                 
                 if let tracks = album?.tracks.items, !tracks.isEmpty {
@@ -361,16 +290,9 @@ struct AlbumDetailView: View {
                             Image(systemName: "list.number")
                             Text("rank all songs")
                                 .lineLimit(1)
-                                .minimumScaleFactor(0.75)
                         }
                         .font(.caption)
                         .foregroundColor(.white.opacity(0.8))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                        )
                     }
                 }
             }
@@ -384,7 +306,8 @@ struct AlbumDetailView: View {
                 itemName: album?.name ?? albumName,
                 artistName: album?.artistNames ?? artistName,
                 imageURL: album?.imageURL ?? imageURL,
-                reviewType: .album
+                reviewType: .album,
+                showHeader: false
             )
         }
         .padding(.horizontal)
@@ -433,15 +356,17 @@ struct AlbumDetailView: View {
                 
                 Spacer()
                 
-                // Column header for average rating
-                VStack(spacing: 1) {
-                    Text("average")
-                    Text("rating")
+                // Column header for average rating, only when any track has a rating
+                if tracks.contains(where: { (trackAverageRatings[$0.id] ?? ratingsManager.getAverageRating(for: $0.id)) != nil }) {
+                    VStack(spacing: 1) {
+                        Text("average")
+                        Text("rating")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.6))
+                    .frame(width: 55, alignment: .center)
+                    .padding(.trailing, 32) // Account for row inner padding + chevron spacing + chevron width
                 }
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.6))
-                .frame(width: 55, alignment: .center)
-                .padding(.trailing, 32) // Account for row inner padding + chevron spacing + chevron width
             }
             .padding(.horizontal)
             
@@ -488,7 +413,6 @@ struct AlbumDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .padding(.top, 16)
     }
     
     // MARK: - Data Loading

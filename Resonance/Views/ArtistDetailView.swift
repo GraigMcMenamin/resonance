@@ -60,7 +60,7 @@ struct ArtistDetailView: View {
                 .padding()
             } else {
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 14) {
                         // Artist Header
                         artistHeader
                         
@@ -81,7 +81,7 @@ struct ArtistDetailView: View {
                 }
             }
         }
-        .navigationTitle(artistName)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedItem) { item in
             RatingSheet(item: item, ratingsManager: ratingsManager)
@@ -126,7 +126,7 @@ struct ArtistDetailView: View {
     // MARK: - Artist Header
     
     private var artistHeader: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 10) {
             // Artist Image - edge to edge with small padding, square with rounded corners
             GeometryReader { geometry in
                 CustomAsyncImage(url: artist?.imageURL ?? artistImageURL) { phase in
@@ -160,54 +160,56 @@ struct ArtistDetailView: View {
                 }
             }
             .aspectRatio(1, contentMode: .fit)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 40)
             
-            // Artist Name
-            Text(artist?.name ?? artistName)
-                .font(.title)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
+            HStack(alignment: .top, spacing: 12) {
+                Text(artist?.name ?? artistName)
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                playButton
+            }
+            .padding(.top, 12)
         }
-        .padding(.top, 20)
+        .padding(.top, 8)
+        .padding(.horizontal)
+    }
+    
+    // Open in Spotify
+    private var playButton: some View {
+        Button(action: {
+            if let uri = SpotifyService.spotifyURI(type: "artist", id: artistId),
+               UIApplication.shared.canOpenURL(uri) {
+                UIApplication.shared.open(uri)
+            } else if let webURL = SpotifyService.spotifyWebURL(type: "artist", id: artistId) {
+                UIApplication.shared.open(webURL)
+            }
+        }) {
+            Image(systemName: "play.circle.fill")
+                .font(.largeTitle)
+                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+        }
     }
     
     // MARK: - Rating Section
     
     private var ratingSection: some View {
-        VStack(spacing: 20) {
-            // Average Rating Display
+        VStack(alignment: .leading, spacing: 12) {
+            // Average rating (hidden entirely when there is none)
             if let average = ratingsManager.getAverageRating(for: artistId) {
-                HStack(spacing: 12) {
-                    Text("average")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.6))
-                    Text("\(Int(average))%")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
+                HStack(spacing: 8) {
                     RatingBar(percentage: average)
-                        .frame(width: 120, height: 8)
+                        .frame(width: 100, height: 8)
+                    Text("\(Int(average))%")
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
                 }
             }
             
-            // Rate & Review and Reviews Buttons
-            HStack(spacing: 12) {
-                Button(action: {
-                    if let artist = artist {
-                        selectedItem = .artist(artist)
-                    }
-                }) {
-                    Text(hasUserRating ? "edit review" : "review")
-                    .font(.footnote)
-                    .lineLimit(1)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Color(red: 0.6, green: 0.4, blue: 0.8))
-                    .cornerRadius(20)
-                }
-                .disabled(artist == nil)
-                
+            // Reviews, Send (left) and review button (right)
+            HStack(spacing: 28) {
                 NavigationLink(destination: ReviewsListView(
                     spotifyId: artistId,
                     itemName: artist?.name ?? artistName,
@@ -222,12 +224,6 @@ struct ArtistDetailView: View {
                     }
                     .font(.footnote)
                     .foregroundColor(.white.opacity(0.8))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                    )
                 }
                 
                 // Send to Buddy Button
@@ -242,50 +238,37 @@ struct ArtistDetailView: View {
                         }
                         .font(.footnote)
                         .foregroundColor(.white.opacity(0.8))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                        )
                     }
                 }
                 
-                // Open in Spotify
+                Spacer(minLength: 8)
+                
                 Button(action: {
-                    if let uri = SpotifyService.spotifyURI(type: "artist", id: artistId),
-                       UIApplication.shared.canOpenURL(uri) {
-                        UIApplication.shared.open(uri)
-                    } else if let webURL = SpotifyService.spotifyWebURL(type: "artist", id: artistId) {
-                        UIApplication.shared.open(webURL)
+                    if let artist = artist {
+                        selectedItem = .artist(artist)
                     }
                 }) {
-                    Image(systemName: "play.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.green)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.green.opacity(0.5), lineWidth: 1)
-                        )
+                    Text(hasUserRating ? "edit review" : "review")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 9)
+                    .background(Color(red: 0.6, green: 0.4, blue: 0.8))
+                    .cornerRadius(20)
                 }
+                .disabled(artist == nil)
             }
             
             // Add To Listen List Button
             Button(action: { showAddToListenListSheet = true }) {
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
                     Image(systemName: listenListManager.contains(spotifyId: artistId) ? "checkmark.circle" : "plus.circle")
                     Text(listenListManager.contains(spotifyId: artistId) ? "on listen list" : "add to listen list")
+                        .lineLimit(1)
                 }
-                .font(.footnote)
+                .font(.caption)
                 .foregroundColor(.white.opacity(0.8))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                )
             }
             
             // Buddy Ratings Section
@@ -297,7 +280,8 @@ struct ArtistDetailView: View {
                 itemName: artist?.name ?? artistName,
                 artistName: nil,
                 imageURL: artist?.imageURL ?? artistImageURL,
-                reviewType: .artist
+                reviewType: .artist,
+                showHeader: false
             )
         }
         .padding(.horizontal)
