@@ -37,9 +37,8 @@ struct OtherUserListenListView: View {
             } else {
                 List {
                     ForEach(displayedItems) { item in
-                        NavigationLink(destination: destinationView(for: item)) {
-                            ListenListRow(item: item)
-                        }
+                        ListenListRow(item: item)
+                        .listLink { destinationView(for: item) }
                         .listRowBackground(Color.black)
                     }
                 }

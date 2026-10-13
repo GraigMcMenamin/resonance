@@ -336,7 +336,7 @@ struct ArtistDetailView: View {
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.6))
                     .frame(width: 50, alignment: .trailing)
-                    .padding(.trailing, 20) // Account for chevron
+                    .padding(.trailing, 12) // Match row inner padding
             }
             .padding(.horizontal)
             
@@ -492,10 +492,6 @@ struct TrackRowCompact: View {
             Spacer()
             
             RatingBadgeCompact(spotifyId: track.id, ratingsManager: ratingsManager, userId: userId, averageRatingOverride: averageRatingOverride)
-            
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.3))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

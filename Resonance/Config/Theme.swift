@@ -9,7 +9,30 @@ extension Color {
     static let lighterButtonPurple = Color(red: 0.32, green: 0.20, blue: 0.40)
 }
 
+/// Drop-in NavigationLink replacement for List rows that omits the system disclosure chevron.
+struct ListRowLink<Destination: View, Content: View>: View {
+    let destination: Destination
+    let content: Content
+
+    init(destination: Destination, @ViewBuilder content: () -> Content) {
+        self.destination = destination
+        self.content = content()
+    }
+
+    var body: some View {
+        content.listLink { destination }
+    }
+}
+
 extension View {
+    /// Row tap navigation inside a List without the system disclosure chevron.
+    func listLink<Destination: View>(@ViewBuilder destination: () -> Destination) -> some View {
+        self
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .overlay(NavigationLink(destination: destination()) { EmptyView() }.opacity(0))
+    }
+
     /// Paints the top safe area solid purple, since the system bar can render see-through over dark content.
     func solidPurpleTopBar() -> some View {
         self

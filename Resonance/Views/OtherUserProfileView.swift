@@ -63,10 +63,6 @@ struct OtherUserProfileView: View {
                                 Text("\(viewModel.totalRatingsCount)")
                                     .font(.subheadline)
                                     .foregroundColor(.white.opacity(0.7))
-
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.3))
                             }
                             .padding(.vertical, 10)
                             .padding(.horizontal)
@@ -92,10 +88,6 @@ struct OtherUserProfileView: View {
                                 Text("\(viewModel.listenListCount)")
                                     .font(.subheadline)
                                     .foregroundColor(.white.opacity(0.7))
-
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.3))
                             }
                             .padding(.vertical, 10)
                             .padding(.horizontal)
@@ -383,10 +375,6 @@ struct OtherUserProfileView: View {
                 Text("\(viewModel.buddies.count)")
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.7))
-                
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.3))
             }
             .padding(.vertical, 10)
             .padding(.horizontal)
@@ -489,9 +477,6 @@ struct OtherUserProfileView: View {
                                         .foregroundColor(.white.opacity(0.4))
                                         .lineLimit(1)
                                 }
-                                Image(systemName: "chevron.right")
-                                    .font(.caption2)
-                                    .foregroundColor(.white.opacity(0.25))
                             }
                         }
                         .buttonStyle(.plain)
@@ -588,11 +573,6 @@ struct OtherUserProfileView: View {
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
                 }
-                
-                // Chevron
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.3))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 11)
@@ -739,11 +719,6 @@ struct OtherUserProfileView: View {
                 RatingBar(percentage: Double(rating.percentage))
                     .frame(width: 70, height: 8)
             }
-            
-            // Chevron
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.3))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 11)

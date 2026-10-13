@@ -228,7 +228,7 @@ struct ArtistListView: View {
     
     private var artistList: some View {
         List(artists) { artist in
-            NavigationLink(destination: ArtistDetailView(
+            ListRowLink(destination: ArtistDetailView(
                 artistId: artist.id,
                 artistName: artist.name,
                 artistImageURL: artist.imageURL
@@ -313,7 +313,7 @@ struct AlbumListView: View {
     
     private var albumList: some View {
         List(albums) { album in
-            NavigationLink(destination: AlbumDetailView(
+            ListRowLink(destination: AlbumDetailView(
                 albumId: album.id,
                 albumName: album.name,
                 artistName: album.artistNames,
@@ -403,7 +403,7 @@ struct TrackListView: View {
     
     private var trackList: some View {
         List(tracks) { track in
-            NavigationLink(destination: SongDetailView(
+            ListRowLink(destination: SongDetailView(
                 trackId: track.id,
                 trackName: track.name,
                 artistName: track.artistNames,
@@ -709,7 +709,7 @@ struct UserListView: View {
             .padding()
         } else {
             List(filteredUsers) { user in
-                NavigationLink(destination: OtherUserProfileView(user: user)) {
+                ListRowLink(destination: OtherUserProfileView(user: user)) {
                     HStack(spacing: 12) {
                         // Profile Image
                         if let imageURLString = user.displayImageURL, let imageURL = URL(string: imageURLString) {

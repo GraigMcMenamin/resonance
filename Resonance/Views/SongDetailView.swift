@@ -368,7 +368,7 @@ struct SongDetailView: View {
                             .font(.caption)
                             .foregroundColor(.white.opacity(0.6))
                             .frame(width: 50, alignment: .trailing)
-                            .padding(.trailing, 20) // Account for chevron
+                            .padding(.trailing, 12) // Match row inner padding
                     }
                 }
                 
@@ -413,10 +413,6 @@ struct SongDetailView: View {
                         Spacer()
                         
                         RatingBadgeCompact(spotifyId: album.id, ratingsManager: ratingsManager, userId: authManager.currentUser?.id, averageRatingOverride: albumAverageRating)
-                        
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.3))
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
@@ -474,10 +470,6 @@ struct SongDetailView: View {
                         Spacer()
                         
                         RatingBadgeCompact(spotifyId: albumId, ratingsManager: ratingsManager, userId: authManager.currentUser?.id, averageRatingOverride: albumAverageRating)
-                        
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.3))
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)

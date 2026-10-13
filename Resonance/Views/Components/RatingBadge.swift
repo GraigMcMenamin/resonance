@@ -442,13 +442,6 @@ struct BuddyRatingRow: View {
                 RatingBarMini(percentage: Double(rating.percentage))
                     .frame(width: 50, height: 6)
             }
-            
-            // Chevron to indicate tappable profile area
-            if isCurrentUser || profileDestination != nil {
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.3))
-            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -462,12 +455,6 @@ struct BuddyRatingRow: View {
                 .lineLimit(4)
                 .multilineTextAlignment(.leading)
             Spacer()
-            // Small indicator that review text is tappable
-            if reviewDestination != nil {
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundColor(.white.opacity(0.25))
-            }
         }
         .padding(.horizontal, 12)
         .padding(.top, 6)

@@ -847,12 +847,6 @@ struct RatingRow: View {
                             .multilineTextAlignment(.leading)
                     }
                     Spacer()
-                    if onReviewTapped != nil {
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.top, 2)
-                    }
                 }
                 .padding(.top, 8)
                 .padding(.leading, 72)
@@ -1141,10 +1135,6 @@ struct LibraryBuddyRatingRow: View {
                         .font(.headline)
                         .fontWeight(.bold)
                         .foregroundColor(percentageColor)
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.3))
                 }
             }
             .buttonStyle(.plain)
@@ -1800,10 +1790,6 @@ struct RecommendationFeedRow: View {
                                 .foregroundColor(.orange)
                         }
                     }
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.gray.opacity(0.5))
                 }
             }
             .buttonStyle(.plain)

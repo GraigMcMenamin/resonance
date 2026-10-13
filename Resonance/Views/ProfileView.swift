@@ -90,10 +90,6 @@ struct ProfileView: View {
                                     Text("\(ratingsManager.totalRatingsCount)")
                                         .font(.subheadline)
                                         .foregroundColor(.white.opacity(0.7))
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.white.opacity(0.3))
                                 }
                                 .padding(.vertical, 10)
                                 .padding(.horizontal)
@@ -119,10 +115,6 @@ struct ProfileView: View {
                                     Text("\(listenListManager.items.count)")
                                         .font(.subheadline)
                                         .foregroundColor(.white.opacity(0.7))
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.white.opacity(0.3))
                                 }
                                 .padding(.vertical, 10)
                                 .padding(.horizontal)
@@ -542,10 +534,6 @@ struct ProfileView: View {
                                         .foregroundColor(.white.opacity(0.4))
                                         .font(.caption)
                                 }
-                            } else {
-                                Image(systemName: "chevron.right")
-                                    .foregroundColor(.white.opacity(0.3))
-                                    .font(.caption)
                             }
                         }
                         .padding(10)
@@ -669,9 +657,6 @@ struct ProfileView: View {
                                                 .foregroundColor(.white.opacity(0.4))
                                                 .lineLimit(1)
                                         }
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption2)
-                                            .foregroundColor(.white.opacity(0.25))
                                     }
                                 }
                                 .buttonStyle(.plain)
@@ -808,11 +793,6 @@ struct ProfileView: View {
                             .foregroundColor(.white)
                     }
                 }
-                
-                // Chevron
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.3))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 11)
@@ -869,10 +849,6 @@ struct ProfileView: View {
                 Text("\(buddyManager.buddies.count)")
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.7))
-                
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.3))
             }
             .padding(.vertical, 10)
             .padding(.horizontal)
@@ -1009,11 +985,6 @@ struct ProfileView: View {
                 RatingBar(percentage: Double(rating.percentage))
                     .frame(width: 70, height: 8)
             }
-            
-            // Chevron
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.3))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 11)

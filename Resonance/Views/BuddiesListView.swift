@@ -50,9 +50,8 @@ struct BuddiesListView: View {
             } else {
                 List {
                     ForEach(displayedBuddies) { buddy in
-                        NavigationLink(destination: buddyProfileDestination(buddy: buddy)) {
-                            buddyRow(buddy: buddy)
-                        }
+                        buddyRow(buddy: buddy)
+                        .listLink { buddyProfileDestination(buddy: buddy) }
                         .listRowBackground(Color.white.opacity(0.05))
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             if allowRemove {

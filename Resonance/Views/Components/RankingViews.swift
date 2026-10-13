@@ -72,10 +72,6 @@ struct RankingSummaryContent: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.secondary)
         }
     }
     
@@ -554,7 +550,7 @@ struct RankingDetailView: View {
                 
                 Section {
                     ForEach(Array(currentRanking.items.enumerated()), id: \.element.id) { index, entry in
-                        NavigationLink(destination: destinationView(for: entry)) {
+                        ListRowLink(destination: destinationView(for: entry)) {
                             HStack(spacing: 12) {
                                 Text("\(index + 1)")
                                     .font(.headline)
