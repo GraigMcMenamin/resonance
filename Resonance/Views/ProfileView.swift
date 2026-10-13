@@ -56,7 +56,7 @@ struct ProfileView: View {
 
     private var profileInnerContent: some View {
         ZStack {
-            Color(red: 0.15, green: 0.08, blue: 0.18)
+            Color.black
                 .ignoresSafeArea()
                 
                 ScrollView {
@@ -97,7 +97,7 @@ struct ProfileView: View {
                                 }
                                 .padding(.vertical, 10)
                                 .padding(.horizontal)
-                                .background(Color.white.opacity(0.05))
+                                .background(Color.appBarPurple)
                                 .cornerRadius(12)
                             }
                             .buttonStyle(.plain)
@@ -126,7 +126,7 @@ struct ProfileView: View {
                                 }
                                 .padding(.vertical, 10)
                                 .padding(.horizontal)
-                                .background(Color.white.opacity(0.05))
+                                .background(Color.appBarPurple)
                                 .cornerRadius(12)
                             }
                             .buttonStyle(.plain)
@@ -163,6 +163,7 @@ struct ProfileView: View {
             }
             .navigationTitle("profile")
             .navigationBarTitleDisplayMode(.inline)
+            .solidPurpleTopBar()
             .sheet(item: $selectedPickerType) { type in
                 TopItemPicker(viewModel: viewModel, itemType: type)
                     .environmentObject(spotifyService)
@@ -339,7 +340,7 @@ struct ProfileView: View {
                     }
                 }
                 .aspectRatio(1, contentMode: .fit)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 40)
                 .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItem, matching: .images)
                 .confirmationDialog("Profile Picture", isPresented: $showImageOptions, titleVisibility: .visible) {
                     Button("Choose from Library") {
@@ -710,10 +711,7 @@ struct ProfileView: View {
             }
             } // End of authenticated user else block
         }
-        .padding()
         .frame(maxWidth: .infinity)
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(12)
     }
     
     @ViewBuilder
@@ -739,16 +737,13 @@ struct ProfileView: View {
             if items.isEmpty {
                 emptyStateView(type: type)
             } else {
-                VStack(spacing: 12) {
+                VStack(spacing: 0) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         topItemRow(item: item, rank: index + 1, type: type)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(12)
     }
     
     @ViewBuilder
@@ -819,9 +814,9 @@ struct ProfileView: View {
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.3))
             }
-            .padding(10)
-            .background(Color.white.opacity(0.03))
-            .cornerRadius(8)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -881,7 +876,7 @@ struct ProfileView: View {
             }
             .padding(.vertical, 10)
             .padding(.horizontal)
-            .background(Color.white.opacity(0.05))
+            .background(Color.appBarPurple)
             .cornerRadius(12)
         }
         .buttonStyle(.plain)
@@ -925,7 +920,7 @@ struct ProfileView: View {
                 .padding(.vertical, 40)
             } else {
                 // Most recent 10 ratings only
-                VStack(spacing: 12) {
+                VStack(spacing: 0) {
                     ForEach(ratingsManager.allRatingsSorted.prefix(10)) { rating in
                         NavigationLink(destination: ratingDestinationView(for: rating)) {
                             ratingRow(rating: rating)
@@ -935,9 +930,6 @@ struct ProfileView: View {
                 }
             }
         }
-        .padding()
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(12)
     }
     
     @ViewBuilder
@@ -1023,9 +1015,9 @@ struct ProfileView: View {
                 .font(.caption)
                 .foregroundColor(.white.opacity(0.3))
         }
-        .padding(8)
-        .background(Color.white.opacity(0.03))
-        .cornerRadius(8)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
     }
     
     // MARK: - Profile Image Helpers

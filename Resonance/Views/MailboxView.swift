@@ -286,8 +286,9 @@ struct MailboxView: View {
 
                 Button(action: { openInSpotify(recommendation) }) {
                     Image(systemName: "play.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.green)
+                        .font(.largeTitle)
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Color.lighterButtonPurple)
                 }
                 .buttonStyle(.plain)
             }
@@ -330,7 +331,7 @@ struct MailboxView: View {
             }
         }
         .padding(12)
-        .background(Color(red: 0.6, green: 0.4, blue: 0.8).opacity(0.3))
+        .background(Color.appBarPurple)
         .cornerRadius(10)
     }
 

@@ -386,7 +386,7 @@ struct BuddyRatingRow: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color.white.opacity(0.05))
+                .fill(Color.appBarPurple)
         )
     }
     

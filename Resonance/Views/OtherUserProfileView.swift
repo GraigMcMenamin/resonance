@@ -28,7 +28,7 @@ struct OtherUserProfileView: View {
     
     var body: some View {
         ZStack {
-            Color(red: 0.15, green: 0.08, blue: 0.18)
+            Color.black
                 .ignoresSafeArea()
             
             if viewModel.isLoading {
@@ -70,7 +70,7 @@ struct OtherUserProfileView: View {
                             }
                             .padding(.vertical, 10)
                             .padding(.horizontal)
-                            .background(Color.white.opacity(0.05))
+                            .background(Color.appBarPurple)
                             .cornerRadius(12)
                         }
                         .buttonStyle(.plain)
@@ -99,7 +99,7 @@ struct OtherUserProfileView: View {
                             }
                             .padding(.vertical, 10)
                             .padding(.horizontal)
-                            .background(Color.white.opacity(0.05))
+                            .background(Color.appBarPurple)
                             .cornerRadius(12)
                         }
                         .buttonStyle(.plain)
@@ -148,6 +148,7 @@ struct OtherUserProfileView: View {
         }
         .navigationTitle(user.username.map { "@\($0)" } ?? "User")
         .navigationBarTitleDisplayMode(.inline)
+        .solidPurpleTopBar()
         .onAppear {
             print("DEBUG OtherUserProfileView: user.id = \(user.id)")
             print("DEBUG OtherUserProfileView: user.firebaseUID = \(user.firebaseUID)")
@@ -191,8 +192,6 @@ struct OtherUserProfileView: View {
                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color.white.opacity(0.05))
-                .cornerRadius(12)
         } else if authManager.currentUser?.id == user.id {
             // Don't show buddy actions for own profile
             EmptyView()
@@ -281,8 +280,6 @@ struct OtherUserProfileView: View {
                         }
                     }
                     .padding()
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(12)
                     
                 case .buddies:
                     HStack(spacing: 10) {
@@ -393,7 +390,7 @@ struct OtherUserProfileView: View {
             }
             .padding(.vertical, 10)
             .padding(.horizontal)
-            .background(Color.white.opacity(0.05))
+            .background(Color.appBarPurple)
             .cornerRadius(12)
         }
         .buttonStyle(.plain)
@@ -435,7 +432,7 @@ struct OtherUserProfileView: View {
                 }
             }
             .aspectRatio(1, contentMode: .fit)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 40)
             
             // Username
             if let username = user.username {
@@ -513,10 +510,7 @@ struct OtherUserProfileView: View {
                     .foregroundColor(.white.opacity(0.7))
             }
         }
-        .padding()
         .frame(maxWidth: .infinity)
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(12)
     }
     
     @ViewBuilder
@@ -527,15 +521,12 @@ struct OtherUserProfileView: View {
                 .fontWeight(.bold)
                 .foregroundColor(.white)
             
-            VStack(spacing: 12) {
+            VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     topItemRow(item: item, rank: index + 1, type: type)
                 }
             }
         }
-        .padding()
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(12)
     }
     
     @ViewBuilder
@@ -603,9 +594,9 @@ struct OtherUserProfileView: View {
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.3))
             }
-            .padding(10)
-            .background(Color.white.opacity(0.03))
-            .cornerRadius(8)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -659,7 +650,7 @@ struct OtherUserProfileView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
             } else {
-                VStack(spacing: 12) {
+                VStack(spacing: 0) {
                     ForEach(viewModel.ratings.prefix(10)) { rating in
                         NavigationLink(destination: ratingDestinationView(for: rating)) {
                             ratingRow(rating: rating)
@@ -669,9 +660,6 @@ struct OtherUserProfileView: View {
                 }
             }
         }
-        .padding()
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(12)
     }
     
     @ViewBuilder
@@ -757,9 +745,9 @@ struct OtherUserProfileView: View {
                 .font(.caption)
                 .foregroundColor(.white.opacity(0.3))
         }
-        .padding(8)
-        .background(Color.white.opacity(0.03))
-        .cornerRadius(8)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
     }
 }
 

@@ -37,7 +37,7 @@ struct ArtistDetailView: View {
     
     var body: some View {
         ZStack {
-            Color(red: 0.15, green: 0.08, blue: 0.18)
+            Color.black
                 .ignoresSafeArea()
             
             if isLoading {
@@ -83,6 +83,7 @@ struct ArtistDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .solidPurpleTopBar()
         .sheet(item: $selectedItem) { item in
             RatingSheet(item: item, ratingsManager: ratingsManager)
                 .environmentObject(authManager)
@@ -173,7 +174,7 @@ struct ArtistDetailView: View {
             }
             .padding(.top, 12)
         }
-        .padding(.top, 8)
+        .padding(.top, 32)
         .padding(.horizontal)
     }
     
@@ -189,7 +190,8 @@ struct ArtistDetailView: View {
         }) {
             Image(systemName: "play.circle.fill")
                 .font(.largeTitle)
-                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, Color.buttonPurple)
         }
     }
     
@@ -254,7 +256,7 @@ struct ArtistDetailView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 9)
-                    .background(Color(red: 0.6, green: 0.4, blue: 0.8))
+                    .background(Color.buttonPurple)
                     .cornerRadius(20)
                 }
                 .disabled(artist == nil)

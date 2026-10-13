@@ -36,7 +36,7 @@ struct AlbumDetailView: View {
     
     var body: some View {
         ZStack {
-            Color(red: 0.15, green: 0.08, blue: 0.18)
+            Color.black
                 .ignoresSafeArea()
             
             if isLoading {
@@ -82,6 +82,7 @@ struct AlbumDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .solidPurpleTopBar()
         .sheet(item: $selectedItem) { item in
             RatingSheet(item: item, ratingsManager: ratingsManager)
                 .environmentObject(authManager)
@@ -178,7 +179,7 @@ struct AlbumDetailView: View {
             }
             .padding(.top, 12)
         }
-        .padding(.top, 8)
+        .padding(.top, 32)
         .padding(.horizontal)
     }
     
@@ -194,7 +195,8 @@ struct AlbumDetailView: View {
         }) {
             Image(systemName: "play.circle.fill")
                 .font(.largeTitle)
-                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, Color.buttonPurple)
         }
     }
     
@@ -266,7 +268,7 @@ struct AlbumDetailView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 9)
-                    .background(Color(red: 0.6, green: 0.4, blue: 0.8))
+                    .background(Color.buttonPurple)
                     .cornerRadius(20)
                 }
                 .disabled(album == nil)
@@ -370,7 +372,7 @@ struct AlbumDetailView: View {
             }
             .padding(.horizontal)
             
-            VStack(spacing: 4) {
+            VStack(spacing: 0) {
                 ForEach(tracks) { track in
                     NavigationLink(destination: SongDetailView(
                         trackId: track.id,
@@ -481,11 +483,8 @@ struct AlbumTrackRowView: View {
                 .foregroundColor(.white.opacity(0.3))
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.white.opacity(0.03))
-        )
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
     }
 }
 

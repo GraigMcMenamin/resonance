@@ -38,7 +38,7 @@ struct SongDetailView: View {
     
     var body: some View {
         ZStack {
-            Color(red: 0.15, green: 0.08, blue: 0.18)
+            Color.black
                 .ignoresSafeArea()
             
             if isLoading {
@@ -77,6 +77,7 @@ struct SongDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .solidPurpleTopBar()
         .sheet(item: $selectedItem) { item in
             RatingSheet(item: item, ratingsManager: ratingsManager)
                 .environmentObject(authManager)
@@ -182,7 +183,7 @@ struct SongDetailView: View {
             }
             .padding(.top, 12)
         }
-        .padding(.top, 8)
+        .padding(.top, 32)
         .padding(.horizontal)
     }
     
@@ -198,7 +199,8 @@ struct SongDetailView: View {
         }) {
             Image(systemName: "play.circle.fill")
                 .font(.largeTitle)
-                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, Color.buttonPurple)
         }
     }
     
@@ -263,7 +265,7 @@ struct SongDetailView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 9)
-                    .background(Color(red: 0.6, green: 0.4, blue: 0.8))
+                    .background(Color.buttonPurple)
                     .cornerRadius(20)
                 }
                 .disabled(track == nil)
@@ -418,10 +420,7 @@ struct SongDetailView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.white.opacity(0.05))
-                    )
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -482,10 +481,7 @@ struct SongDetailView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.white.opacity(0.05))
-                    )
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
