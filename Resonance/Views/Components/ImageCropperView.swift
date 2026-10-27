@@ -38,8 +38,10 @@ struct ImageCropperView: View {
                     // Image layer — moves and scales
                     Image(uiImage: image)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: size * scale, height: size * scale)
+                        .frame(
+                            width: displaySize(cropSize: size).width,
+                            height: displaySize(cropSize: size).height
+                        )
                         .offset(offset)
                     
                     // Darkened border outside the crop square
@@ -60,6 +62,9 @@ struct ImageCropperView: View {
                 .gesture(magnificationGesture(cropSize: size))
                 .onAppear {
                     cropSize = size
+                }
+                .onChange(of: size) { newSize in
+                    cropSize = newSize
                 }
             }
             
@@ -135,10 +140,21 @@ struct ImageCropperView: View {
     
     // MARK: - Helpers
     
+    /// Displayed image size: short side fills the crop square at scale 1, long side extends beyond it.
+    private func displaySize(cropSize: CGFloat) -> CGSize {
+        if imageAspect >= 1 {
+            let height = cropSize * scale
+            return CGSize(width: height * imageAspect, height: height)
+        } else {
+            let width = cropSize * scale
+            return CGSize(width: width, height: width / imageAspect)
+        }
+    }
+    
     private func clampOffset(cropSize: CGFloat) {
-        let imageDisplaySize = cropSize * scale
-        let maxOffsetX = max(0, (imageDisplaySize - cropSize) / 2)
-        let maxOffsetY = max(0, (imageDisplaySize - cropSize) / 2)
+        let display = displaySize(cropSize: cropSize)
+        let maxOffsetX = max(0, (display.width - cropSize) / 2)
+        let maxOffsetY = max(0, (display.height - cropSize) / 2)
         
         withAnimation(.easeOut(duration: 0.15)) {
             offset.width = min(maxOffsetX, max(-maxOffsetX, offset.width))
@@ -153,9 +169,8 @@ struct ImageCropperView: View {
         // How much of the image is visible at current scale
         let visibleSize = shortSide / scale
         
-        // Convert screen offset to image-space offset
-        let imageDisplaySize = cropSize * scale
-        let pixelsPerPoint = shortSide / cropSize
+        // Convert screen offset to image-space offset (the displayed image is zoomed by `scale`)
+        let pixelsPerPoint = visibleSize / cropSize
         
         let offsetXInPixels = -offset.width * pixelsPerPoint
         let offsetYInPixels = -offset.height * pixelsPerPoint
@@ -176,12 +191,14 @@ struct ImageCropperView: View {
         cropRect.size.width = min(cropRect.width, imageSize.width)
         cropRect.size.height = min(cropRect.height, imageSize.height)
         
-        guard let cgImage = image.cgImage?.cropping(to: cropRect) else {
-            onCropped(image)
-            return
+        // Drawing (rather than cgImage cropping) respects image orientation and point/pixel scale
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: cropRect.size, format: format)
+        let croppedImage = renderer.image { _ in
+            image.draw(at: CGPoint(x: -cropRect.origin.x, y: -cropRect.origin.y))
         }
-        
-        let croppedImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
         onCropped(croppedImage)
     }
 }
