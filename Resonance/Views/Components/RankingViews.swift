@@ -660,6 +660,7 @@ struct RankingDetailView: View {
                     )
                 ) { EmptyView() }
                 .hidden()
+                .listRowSeparator(.hidden)
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
