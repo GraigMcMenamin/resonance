@@ -7,6 +7,21 @@
 
 import SwiftUI
 
+enum ReviewFilter: CaseIterable, Identifiable {
+    case all, short, long, buddies
+    
+    var id: Self { self }
+    
+    var title: String {
+        switch self {
+        case .all: return "All reviews"
+        case .short: return "Short reviews"
+        case .long: return "Long reviews"
+        case .buddies: return "Buddy reviews"
+        }
+    }
+}
+
 struct ReviewsListView: View {
     let spotifyId: String
     let itemName: String
@@ -26,7 +41,9 @@ struct ReviewsListView: View {
     @State private var reviewLikeCounts: [String: Int] = [:]
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var selectedLength: Review.ReviewLength
+    @State private var filter: ReviewFilter = .all
+    @State private var buddyCommentedReviewIds: Set<String> = []
+    @State private var hasLoadedBuddyComments = false
     @State private var didScrollToTarget = false
     @State private var navigateToUserId: String? = nil
     
@@ -39,12 +56,11 @@ struct ReviewsListView: View {
         self.scrollToReviewId = scrollToReviewId
         self.scrollToCommentId = scrollToCommentId
         self.initialSelectedLength = initialSelectedLength
-        _selectedLength = State(initialValue: initialSelectedLength)
     }
     
     var body: some View {
         ZStack {
-            Color(red: 0.15, green: 0.08, blue: 0.18)
+            Color.black
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
@@ -89,12 +105,12 @@ struct ReviewsListView: View {
                 } else {
                     ScrollViewReader { proxy in
                         ScrollView {
-                            LazyVStack(spacing: 16) {
+                            LazyVStack(spacing: 0) {
                                 ForEach(sortedFilteredReviews) { review in
                                     ReviewCard(
                                         review: review,
                                         initialLikesCount: reviewLikeCounts[review.id] ?? 0,
-                                        autoExpandComments: review.id == scrollToReviewId,
+                                        buddyCommentsOnly: filter == .buddies,
                                         scrollToCommentId: review.id == scrollToReviewId ? scrollToCommentId : nil,
                                         onDelete: {
                                             await deleteReview(review)
@@ -104,17 +120,19 @@ struct ReviewsListView: View {
                                     .id(review.id)
                                     .environmentObject(authManager)
                                     .environmentObject(firebaseService)
+                                    
+                                    Divider()
+                                        .background(Color.white.opacity(0.1))
                                 }
                             }
-                            .padding()
                         }
                         .scrollDismissesKeyboard(.interactively)
                         .onChange(of: isLoading) { loading in
                             if !loading, !didScrollToTarget, let targetId = scrollToReviewId {
-                                // Auto-select the correct length tab for the target review
+                                // Clear the filter if it would hide the target review
                                 if let targetReview = reviews.first(where: { $0.id == targetId }),
-                                   let length = targetReview.reviewLength, length != selectedLength {
-                                    selectedLength = length
+                                   !matchesFilter(targetReview) {
+                                    filter = .all
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                     withAnimation {
@@ -143,21 +161,44 @@ struct ReviewsListView: View {
         .task {
             await loadReviews()
         }
+        .onChange(of: filter) { newValue in
+            if newValue == .buddies {
+                Task { await loadBuddyComments() }
+            }
+        }
     }
     
     private var lengthFilterSection: some View {
         VStack(spacing: 0) {
-            Picker("Review Length", selection: $selectedLength) {
-                Text("Short").tag(Review.ReviewLength.short)
-                Text("Long").tag(Review.ReviewLength.long)
+            HStack {
+                Menu {
+                    Picker("Filter", selection: $filter) {
+                        ForEach(ReviewFilter.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(filter.title)
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(16)
+                }
+                Spacer()
             }
-            .pickerStyle(.segmented)
-            .padding()
+            .padding(.horizontal)
+            .padding(.vertical, 6)
             
             Divider()
                 .background(Color.white.opacity(0.1))
         }
-        .background(Color(red: 0.12, green: 0.06, blue: 0.15))
+        .background(Color.black)
     }
     
     private var emptyStateView: some View {
@@ -166,7 +207,7 @@ struct ReviewsListView: View {
                 .font(.system(size: 50))
                 .foregroundColor(.white.opacity(0.3))
             
-            Text("No \(selectedLength == .short ? "short" : "long") reviews yet")
+            Text("No \(filter.title.lowercased()) yet")
                 .font(.headline)
                 .foregroundColor(.white.opacity(0.7))
             
@@ -181,8 +222,35 @@ struct ReviewsListView: View {
         Set(buddyManager.buddies.map { $0.id })
     }
     
+    private var buddyAndSelfIds: Set<String> {
+        guard let me = authManager.currentUser?.id else { return buddyIds }
+        return buddyIds.union([me])
+    }
+    
+    private func matchesFilter(_ review: Review) -> Bool {
+        switch filter {
+        case .all: return true
+        case .short: return review.reviewLength == .short
+        case .long: return review.reviewLength == .long
+        case .buddies: return buddyAndSelfIds.contains(review.userId) || buddyCommentedReviewIds.contains(review.id)
+        }
+    }
+    
+    private func loadBuddyComments() async {
+        guard !hasLoadedBuddyComments else { return }
+        hasLoadedBuddyComments = true
+        var ids: Set<String> = []
+        for review in reviews {
+            guard let comments = try? await firebaseService.getReviewComments(reviewId: review.id) else { continue }
+            if comments.contains(where: { buddyAndSelfIds.contains($0.userId) }) {
+                ids.insert(review.id)
+            }
+        }
+        buddyCommentedReviewIds = ids
+    }
+    
     private var sortedFilteredReviews: [Review] {
-        let filtered = reviews.filter { $0.hasReviewContent && $0.reviewLength == selectedLength }
+        let filtered = reviews.filter { $0.hasReviewContent && matchesFilter($0) }
         let buddyReviews = filtered.filter { buddyIds.contains($0.userId) }
         let otherReviews = filtered.filter { !buddyIds.contains($0.userId) }
         
@@ -239,12 +307,14 @@ struct ReviewCard: View {
     let review: Review
     let initialLikesCount: Int
     var autoExpandComments: Bool = false
+    var buddyCommentsOnly: Bool = false
     var scrollToCommentId: String? = nil
     var onDelete: (() async -> Void)? = nil
     var onUserTap: ((String) -> Void)? = nil
     
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
+    @EnvironmentObject var buddyManager: BuddyManager
     
     @State private var isLiked = false
     @State private var likesCount = 0
@@ -335,9 +405,6 @@ struct ReviewCard: View {
                 .foregroundColor(.white.opacity(0.9))
             }
             
-            Divider()
-                .background(Color.white.opacity(0.1))
-            
             HStack(spacing: 16) {
                 Button(action: toggleLike) {
                     HStack(spacing: 4) {
@@ -395,13 +462,30 @@ struct ReviewCard: View {
             
             if showComments {
                 commentsSection
+            } else if !buddyComments.isEmpty {
+                // Buddy comments show without expanding; everyone else's need the comment icon
+                ForEach(buddyComments) { comment in
+                    CommentRow(
+                        comment: comment,
+                        reviewId: review.id,
+                        initialLikesCount: commentLikeCounts[comment.id] ?? 0,
+                        onDelete: {
+                            await deleteComment(comment)
+                        },
+                        onReply: { replyComment in
+                            replyingToComment = replyComment
+                            showComments = true
+                        },
+                        onUserTap: onUserTap
+                    )
+                    .environmentObject(authManager)
+                    .environmentObject(firebaseService)
+                    .id(comment.id)
+                }
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.05))
-        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .confirmationDialog("Delete Review", isPresented: $showDeleteConfirmation) {
             Button("Delete Review", role: .destructive) {
                 Task { await onDelete?() }
@@ -604,8 +688,16 @@ struct ReviewCard: View {
         }
     }
     
+    private var buddyComments: [ReviewComment] {
+        let ids = Set(buddyManager.buddies.map { $0.id })
+        return sortedComments.filter { ids.contains($0.userId) || (buddyCommentsOnly && $0.userId == authManager.currentUser?.id) }
+    }
+    
     private var sortedComments: [ReviewComment] {
-        comments.sorted { $0.createdAt > $1.createdAt }
+        let sorted = comments.sorted { $0.createdAt > $1.createdAt }
+        guard buddyCommentsOnly else { return sorted }
+        let ids = Set(buddyManager.buddies.map { $0.id })
+        return sorted.filter { ids.contains($0.userId) || $0.userId == authManager.currentUser?.id }
     }
     
     private var formattedDate: String {

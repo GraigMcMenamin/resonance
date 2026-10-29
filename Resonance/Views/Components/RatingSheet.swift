@@ -21,7 +21,6 @@ struct RatingSheet: View {
     
     // Review states
     @State private var reviewContent: String = ""
-    @State private var selectedLength: Review.ReviewLength = .short
     @State private var existingReview: Review?
     @State private var isLoadingReview = false
     @State private var isSaving = false
@@ -33,8 +32,12 @@ struct RatingSheet: View {
     @State private var showMentionSuggestions = false
     @State private var mentionSearchTask: Task<Void, Never>? = nil
     
-    private let shortCharacterLimit = 149
     private let minLongCharacters = 150
+
+    // Short/long is derived from length; no manual selection.
+    private var selectedLength: Review.ReviewLength {
+        reviewContent.count >= minLongCharacters ? .long : .short
+    }
     
     var body: some View {
         NavigationView {
@@ -224,30 +227,11 @@ struct RatingSheet: View {
             }
             .padding(.horizontal)
             
-            // Length Toggle
-            Picker("Review Length", selection: $selectedLength) {
-                Text("Short").tag(Review.ReviewLength.short)
-                Text("Long").tag(Review.ReviewLength.long)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .onChange(of: selectedLength) { newValue in
-                if newValue == .short && reviewContent.count >= minLongCharacters {
-                    reviewContent = String(reviewContent.prefix(shortCharacterLimit))
-                }
-            }
-            
             // Character count
             HStack {
-                if selectedLength == .short {
-                    Text("\(reviewContent.count)/\(shortCharacterLimit)")
-                        .font(.caption)
-                        .foregroundColor(reviewContent.count > shortCharacterLimit ? .red : .white.opacity(0.5))
-                } else {
-                    Text("\(reviewContent.count) characters (min \(minLongCharacters))")
-                        .font(.caption)
-                        .foregroundColor(reviewContent.count < minLongCharacters && !reviewContent.isEmpty ? .orange : .white.opacity(0.5))
-                }
+                Text("\(reviewContent.count) characters · \(selectedLength == .short ? "short" : "long") review")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.5))
                 Spacer()
             }
             .padding(.horizontal)
@@ -266,9 +250,6 @@ struct RatingSheet: View {
                     .foregroundColor(.white)
                     .padding(8)
                     .onChange(of: reviewContent) { newValue in
-                        if selectedLength == .short && newValue.count > shortCharacterLimit {
-                            reviewContent = String(newValue.prefix(shortCharacterLimit))
-                        }
                         handleMentionTyping(newValue)
                     }
             }
@@ -459,30 +440,12 @@ struct RatingSheet: View {
         if trimmed.isEmpty {
             return Color.white.opacity(0.1)
         }
-        if selectedLength == .short && reviewContent.count > shortCharacterLimit {
-            return .red
-        } else if selectedLength == .long && reviewContent.count < minLongCharacters {
-            return .orange
-        }
         return .green
     }
     
     private var canSave: Bool {
-        // Rating is always required (already have percentage)
-        // Review is optional
-        let trimmedReview = reviewContent.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // If there's no review content, we can save (rating only)
-        if trimmedReview.isEmpty {
-            return true
-        }
-        
-        // If there is review content, it must meet length requirements
-        if selectedLength == .short {
-            return reviewContent.count <= shortCharacterLimit
-        } else {
-            return reviewContent.count >= minLongCharacters
-        }
+        // Rating is set already; review is optional and any length is valid
+        return true
     }
     
     // MARK: - Mention Helpers
@@ -538,8 +501,6 @@ struct RatingSheet: View {
             // Load review content from rating if it exists
             if let content = existingRating.reviewContent, !content.isEmpty {
                 reviewContent = content
-                // Determine length based on content
-                selectedLength = content.count < 150 ? .short : .long
             }
         }
     }
@@ -563,9 +524,6 @@ struct RatingSheet: View {
             if let review = existingReview {
                 if let content = review.content, !content.isEmpty {
                     reviewContent = content
-                }
-                if let length = review.reviewLength {
-                    selectedLength = length
                 }
             }
         } catch {
