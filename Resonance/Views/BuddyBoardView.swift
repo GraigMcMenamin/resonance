@@ -817,7 +817,7 @@ struct RatingRow: View {
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text(rating.dateRated.formatted(date: .abbreviated, time: .omitted))
+                    Text(rating.dateRated.feedDateText)
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
@@ -1067,7 +1067,7 @@ struct LibraryBuddyRatingRow: View {
                 
                 Spacer()
                 
-                Text(rating.dateRated.formatted(date: .abbreviated, time: .omitted))
+                Text(rating.dateRated.feedDateText)
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -1711,7 +1711,7 @@ struct RecommendationFeedRow: View {
                 
                 Spacer()
                 
-                Text(recommendation.sentAt.formatted(date: .abbreviated, time: .omitted))
+                Text(recommendation.sentAt.feedDateText)
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }

@@ -16,10 +16,17 @@ struct MailboxView: View {
     @EnvironmentObject var mailboxManager: MailboxManager
 
     @State private var selectedRatingItem: RatableItem?
-
+    @State private var showPokeError = false
+    @State private var isRecommendationsExpanded = true
+    @State private var isSentExpanded = true
+    @State private var isActivityExpanded = true
+    @State private var showOlderRecommendations = false
+    @State private var showOlderSent = false
+    @State private var showOlderActivity = false
     private var isEmpty: Bool {
         buddyManager.pendingRequests.isEmpty &&
         mailboxManager.pendingRecommendations.isEmpty &&
+        mailboxManager.sentRecommendations.isEmpty &&
         mailboxManager.notifications.isEmpty
     }
 
@@ -27,7 +34,7 @@ struct MailboxView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    if isEmpty {
+                    if isEmpty && !mailboxManager.isLoading {
                         emptyState
                     } else {
                         if !buddyManager.pendingRequests.isEmpty {
@@ -36,10 +43,20 @@ struct MailboxView: View {
 
                         if !mailboxManager.pendingRecommendations.isEmpty {
                             recommendationsSection
+                        } else if mailboxManager.isLoadingRecommendations {
+                            loadingRow("loading music recommendations")
+                        }
+
+                        if !mailboxManager.sentRecommendations.isEmpty {
+                            sentSection
+                        } else if mailboxManager.isLoadingSent {
+                            loadingRow("loading music sent")
                         }
 
                         if !mailboxManager.notifications.isEmpty {
                             activitySection
+                        } else if mailboxManager.isLoadingNotifications {
+                            loadingRow("loading activity")
                         }
                     }
                 }
@@ -58,6 +75,11 @@ struct MailboxView: View {
                 .environmentObject(authManager)
                 .environmentObject(firebaseService)
         }
+        .alert("couldn't poke", isPresented: $showPokeError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("something went wrong. you can poke someone once a day, so try again later.")
+        }
         .onAppear {
             mailboxManager.initialize(firebaseService: firebaseService)
             buddyManager.initialize(firebaseService: firebaseService)
@@ -73,6 +95,18 @@ struct MailboxView: View {
     }
 
     // MARK: - Empty State
+
+    private func loadingRow(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .tint(.white)
+            Text(text)
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.6))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+    }
 
     private var emptyState: some View {
         VStack(spacing: 16) {
@@ -210,33 +244,111 @@ struct MailboxView: View {
     // MARK: - Recommendations Section
 
     private var recommendationsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("music recommendations")
+        collapsibleSection(
+            title: "music recommendations",
+            items: mailboxManager.pendingRecommendations,
+            isExpanded: $isRecommendationsExpanded,
+            showOlder: $showOlderRecommendations,
+            isLoadingOlder: mailboxManager.isLoadingOlderRecommendations
+        ) { recommendationRow($0) }
+    }
+
+    /// Shared layout for the recommendations and sent sections: collapsible, with items older than two months behind "see more"
+    private func collapsibleSection<Row: View>(
+        title: String,
+        items: [MusicRecommendation],
+        isExpanded: Binding<Bool>,
+        showOlder: Binding<Bool>,
+        isLoadingOlder: Bool,
+        @ViewBuilder row: @escaping (MusicRecommendation) -> Row
+    ) -> some View {
+        let cutoff = MailboxManager.recentCutoff
+        let recent = items.filter { $0.sentAt >= cutoff }
+        let older = items.filter { $0.sentAt < cutoff }
+
+        return VStack(alignment: .leading, spacing: 12) {
+            collapsibleHeader(title: title, count: items.count, isExpanded: isExpanded)
+
+            if isExpanded.wrappedValue {
+                VStack(spacing: 8) {
+                    ForEach(recent) { row($0) }
+
+                    if older.isEmpty {
+                        if isLoadingOlder {
+                            loadingRow("loading older music")
+                        }
+                    } else {
+                        if showOlder.wrappedValue {
+                            ForEach(older) { row($0) }
+                        }
+
+                        seeMoreButton(showOlder: showOlder, count: older.count)
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+
+    private func collapsibleHeader(title: String, count: Int, isExpanded: Binding<Bool>) -> some View {
+        Button {
+            withAnimation { isExpanded.wrappedValue.toggle() }
+        } label: {
+            HStack(spacing: 8) {
+                Text(title)
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
 
                 Spacer()
 
-                Text("\(mailboxManager.pendingRecommendations.count)")
+                Text("\(count)")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Color(red: 0.6, green: 0.4, blue: 0.8))
-                    .cornerRadius(12)
-            }
-            .padding(.horizontal)
 
-            VStack(spacing: 8) {
-                ForEach(mailboxManager.pendingRecommendations) { recommendation in
-                    recommendationRow(recommendation)
-                }
+                Image(systemName: "chevron.down")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.white.opacity(0.6))
+                    .rotationEffect(.degrees(isExpanded.wrappedValue ? 0 : -90))
             }
-            .padding(.horizontal)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .padding(.horizontal)
+    }
+
+    private func seeMoreButton(showOlder: Binding<Bool>, count: Int) -> some View {
+        Button {
+            withAnimation { showOlder.wrappedValue.toggle() }
+        } label: {
+            Text(showOlder.wrappedValue ? "see less" : "see more (\(count))")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(Color(red: 0.6, green: 0.4, blue: 0.8))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// e.g. "1 day, 16 hrs ago"
+    private func agoText(since date: Date) -> String {
+        let labels = ["yr", "mo", "day", "hr", "min"]
+        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date, to: Date())
+        let values = [c.year, c.month, c.day, c.hour, c.minute].map { max($0 ?? 0, 0) }
+        guard let first = values.firstIndex(where: { $0 > 0 }) else { return "just now" }
+
+        func part(_ i: Int) -> String {
+            let suffix = (values[i] == 1 || labels[i] == "min") ? "" : "s"
+            return "\(values[i]) \(labels[i])\(suffix)"
+        }
+
+        var parts = [part(first)]
+        if first + 1 < values.count, values[first + 1] > 0 {
+            parts.append(part(first + 1))
+        }
+        return parts.joined(separator: ", ") + " ago"
     }
 
     @ViewBuilder
@@ -288,7 +400,7 @@ struct MailboxView: View {
                     Image(systemName: "play.circle.fill")
                         .font(.largeTitle)
                         .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, Color.lighterButtonPurple)
+                        .foregroundStyle(.white, Color(red: 0.6, green: 0.4, blue: 0.8))
                 }
                 .buttonStyle(.plain)
             }
@@ -325,7 +437,7 @@ struct MailboxView: View {
                 Spacer()
             }
             .overlay(alignment: .trailing) {
-                Text(recommendation.sentAt, style: .relative)
+                Text(agoText(since: recommendation.sentAt))
                     .font(.caption2)
                     .foregroundColor(.white.opacity(0.4))
             }
@@ -333,6 +445,121 @@ struct MailboxView: View {
         .padding(12)
         .background(Color.appBarPurple)
         .cornerRadius(10)
+    }
+
+    // MARK: - Music Sent Section
+
+    private var sentSection: some View {
+        collapsibleSection(
+            title: "music sent",
+            items: mailboxManager.sentRecommendations,
+            isExpanded: $isSentExpanded,
+            showOlder: $showOlderSent,
+            isLoadingOlder: mailboxManager.isLoadingOlderSent
+        ) { sentRecommendationRow($0) }
+    }
+
+    @ViewBuilder
+    private func sentRecommendationRow(_ recommendation: MusicRecommendation) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                NavigationLink(destination: recommendationDestination(recommendation)) {
+                    HStack(alignment: .top, spacing: 12) {
+                        if let imageURLString = recommendation.imageURL, let imageURL = URL(string: imageURLString) {
+                            AsyncImage(url: imageURL) { image in
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Circle().fill(Color.white.opacity(0.1))
+                            }
+                            .frame(width: 44, height: 44)
+                            .clipShape(recommendation.itemType == .artist ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+                        } else {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.1))
+                                    .frame(width: 44, height: 44)
+                                Image(systemName: "music.note")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(sentRecommendationText(recommendation))
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            if let message = recommendation.message, !message.isEmpty {
+                                Text("\"\(message)\"")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .lineLimit(2)
+                            }
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 0)
+
+                Button(action: { openInSpotify(recommendation) }) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.largeTitle)
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Color(red: 0.6, green: 0.4, blue: 0.8))
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 12) {
+                Spacer()
+
+                Button(action: {
+                    Task {
+                        if await mailboxManager.poke(recommendation) == false {
+                            showPokeError = true
+                        }
+                    }
+                }) {
+                    Text(recommendation.canPoke ? "Poke" : "Poked")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(recommendation.canPoke ? .white : .white.opacity(0.6))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(recommendation.canPoke ? Color(red: 0.6, green: 0.4, blue: 0.8) : Color.white.opacity(0.1))
+                        .cornerRadius(8)
+                }
+                .disabled(!recommendation.canPoke)
+
+                Spacer()
+            }
+            .overlay(alignment: .trailing) {
+                Text(agoText(since: recommendation.sentAt))
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.4))
+            }
+        }
+        .padding(12)
+        .background(Color.appBarPurple)
+        .cornerRadius(10)
+    }
+
+    private func sentRecommendationText(_ recommendation: MusicRecommendation) -> String {
+        let receiver = recommendation.receiverUsername.map { "@\($0)" } ?? "someone"
+        let typeLabel: String
+        switch recommendation.itemType {
+        case .artist: typeLabel = "artist"
+        case .album: typeLabel = "album"
+        case .track: typeLabel = "song"
+        }
+
+        if recommendation.itemType != .artist, let artistName = recommendation.artistName {
+            return "You sent \(receiver) the \(typeLabel) \"\(recommendation.itemName)\" by \(artistName)"
+        }
+        return "You sent \(receiver) the \(typeLabel) \"\(recommendation.itemName)\""
     }
 
     @ViewBuilder
@@ -450,36 +677,46 @@ struct MailboxView: View {
     // MARK: - Activity Section (mentions, likes, replies)
 
     private var activitySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("activity")
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-                .padding(.horizontal)
+        let cutoff = MailboxManager.recentCutoff
+        let recent = mailboxManager.notifications.filter { $0.createdAt >= cutoff }
+        let older = mailboxManager.notifications.filter { $0.createdAt < cutoff }
+        let visible = showOlderActivity ? recent + older : recent
 
-            VStack(spacing: 0) {
-                ForEach(mailboxManager.notifications) { notification in
-                    activityRow(notification)
-                        .padding(.horizontal)
-                        .padding(.vertical, 12)
-                        .contentShape(Rectangle())
-                        .onTapGesture { handleActivityTap(notification) }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                Task { await mailboxManager.deleteNotification(notification) }
-                            } label: {
-                                Label("Delete", systemImage: "trash")
+        return VStack(alignment: .leading, spacing: 12) {
+            collapsibleHeader(title: "activity", count: mailboxManager.notifications.count, isExpanded: $isActivityExpanded)
+
+            if isActivityExpanded {
+                if !visible.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(visible) { notification in
+                            activityRow(notification)
+                                .padding(.horizontal)
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                                .onTapGesture { handleActivityTap(notification) }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        Task { await mailboxManager.deleteNotification(notification) }
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+
+                            if notification.id != visible.last?.id {
+                                Divider().background(Color.white.opacity(0.1))
                             }
                         }
-
-                    if notification.id != mailboxManager.notifications.last?.id {
-                        Divider().background(Color.white.opacity(0.1))
                     }
+                    .background(Color.white.opacity(0.05))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+                }
+
+                if !older.isEmpty {
+                    seeMoreButton(showOlder: $showOlderActivity, count: older.count)
+                        .padding(.horizontal)
                 }
             }
-            .background(Color.white.opacity(0.05))
-            .cornerRadius(12)
-            .padding(.horizontal)
         }
     }
 
@@ -512,7 +749,7 @@ struct MailboxView: View {
                     .foregroundColor(.white)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(notification.createdAt, style: .relative)
+                Text(agoText(since: notification.createdAt))
                     .font(.caption2)
                     .foregroundColor(.white.opacity(0.4))
             }

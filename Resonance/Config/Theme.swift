@@ -9,6 +9,18 @@ extension Color {
     static let lighterButtonPurple = Color(red: 0.32, green: 0.20, blue: 0.40)
 }
 
+extension Date {
+    /// Buddy board dates: "today", "Oct 12" within this year, "Oct 12, 2025" before that
+    var feedDateText: String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(self) { return "today" }
+        if calendar.isDate(self, equalTo: Date(), toGranularity: .year) {
+            return formatted(.dateTime.month(.abbreviated).day())
+        }
+        return formatted(date: .abbreviated, time: .omitted)
+    }
+}
+
 /// Drop-in NavigationLink replacement for List rows that omits the system disclosure chevron.
 struct ListRowLink<Destination: View, Content: View>: View {
     let destination: Destination

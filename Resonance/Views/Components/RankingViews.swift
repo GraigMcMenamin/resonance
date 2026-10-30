@@ -68,7 +68,7 @@ struct RankingSummaryContent: View {
             Spacer()
             
             if showDate {
-                Text((ranking.dateUpdated ?? ranking.dateCreated).formatted(date: .abbreviated, time: .omitted))
+                Text((ranking.dateUpdated ?? ranking.dateCreated).feedDateText)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -164,7 +164,7 @@ struct RankingFeedRow: View {
                 
                 Spacer()
                 
-                Text((ranking.dateUpdated ?? ranking.dateCreated).formatted(date: .abbreviated, time: .omitted))
+                Text((ranking.dateUpdated ?? ranking.dateCreated).feedDateText)
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }

@@ -701,6 +701,17 @@ struct MusicRecommendation: Codable, Identifiable, Equatable {
     var status: RecommendationStatus
     var receiverRatingId: String? // Links to the receiver's rating if they rated it
     
+    // Last time the sender poked the receiver to listen (server timestamp)
+    var lastPokedAt: Date? = nil
+    
+    /// Senders can poke a receiver once every 24 hours
+    static let pokeCooldown: TimeInterval = 24 * 60 * 60
+    
+    var canPoke: Bool {
+        guard let lastPokedAt = lastPokedAt else { return true }
+        return Date().timeIntervalSince(lastPokedAt) >= Self.pokeCooldown
+    }
+    
     enum ItemType: String, Codable {
         case artist
         case album
@@ -721,7 +732,8 @@ struct MusicRecommendation: Codable, Identifiable, Equatable {
     static func == (lhs: MusicRecommendation, rhs: MusicRecommendation) -> Bool {
         lhs.id == rhs.id &&
         lhs.status == rhs.status &&
-        lhs.receiverRatingId == rhs.receiverRatingId
+        lhs.receiverRatingId == rhs.receiverRatingId &&
+        lhs.lastPokedAt == rhs.lastPokedAt
     }
 }
 

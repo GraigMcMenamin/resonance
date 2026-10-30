@@ -1,5 +1,5 @@
 const {onRequest} = require("firebase-functions/v2/https");
-const {onDocumentCreated, onDocumentWritten, onDocumentDeleted} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentWritten, onDocumentDeleted, onDocumentUpdated} = require("firebase-functions/v2/firestore");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const fetch = require("node-fetch");
@@ -227,6 +227,95 @@ exports.onRecommendationCreated = onDocumentCreated(
       console.log(`Sent notifications to ${fcmTokens.length} device(s)`);
     } catch (error) {
       console.error("Error in onRecommendationCreated:", error);
+    }
+  }
+);
+
+/**
+ * Cloud Function: Send push notification when a sender pokes a receiver
+ *
+ * Triggered when a recommendation's lastPokedAt changes (rate-limited to once
+ * per 24h by firestore.rules). Notifies the receiver to listen to the music.
+ */
+exports.onRecommendationPoked = onDocumentUpdated(
+  "recommendations/{recommendationId}",
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data();
+
+    if (!before || !after) return;
+
+    const beforePoke = before.lastPokedAt?.toMillis?.() ?? null;
+    const afterPoke = after.lastPokedAt?.toMillis?.() ?? null;
+
+    // Only react to a new poke on a recommendation the receiver hasn't acted on
+    if (!afterPoke || afterPoke === beforePoke) return;
+    if (after.status !== "pending") return;
+
+    const {receiverId, senderUsername, itemName, itemType} = after;
+
+    try {
+      const userDoc = await admin.firestore()
+        .collection("users")
+        .doc(receiverId)
+        .get();
+
+      if (!userDoc.exists) {
+        console.log(`User ${receiverId} not found`);
+        return;
+      }
+
+      const fcmTokens = userDoc.data().fcmTokens || [];
+
+      if (fcmTokens.length === 0) {
+        console.log(`No FCM tokens for user ${receiverId}`);
+        return;
+      }
+
+      const senderName = senderUsername || "Someone";
+      const itemTypeLabel = itemType === "track" ? "song" : itemType;
+      const notificationBody = `${senderName} poked you to listen to the ${itemTypeLabel} "${itemName}"`;
+
+      const notifications = fcmTokens.map(async (token) => {
+        try {
+          await admin.messaging().send({
+            token: token,
+            notification: {
+              title: "Resonance",
+              body: notificationBody,
+            },
+            data: {
+              // Reuses the recommendation tap handler (opens the mailbox)
+              type: "recommendation",
+              recommendationId: event.params.recommendationId,
+              spotifyId: after.spotifyId,
+              itemType: itemType,
+            },
+            apns: {
+              payload: {
+                aps: {
+                  sound: "default",
+                },
+              },
+            },
+          });
+        } catch (error) {
+          console.error(`Error sending poke to token: ${error.message}`);
+          if (error.code === "messaging/invalid-registration-token" ||
+              error.code === "messaging/registration-token-not-registered") {
+            await admin.firestore()
+              .collection("users")
+              .doc(receiverId)
+              .update({
+                fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
+              });
+          }
+        }
+      });
+
+      await Promise.all(notifications);
+    } catch (error) {
+      console.error("Error in onRecommendationPoked:", error);
     }
   }
 );

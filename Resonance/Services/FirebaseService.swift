@@ -1344,22 +1344,26 @@ class FirebaseService: ObservableObject {
             .setData(from: recommendation)
     }
     
-    /// Get recommendations sent TO a user (inbox)
-    func getReceivedRecommendations(userId: String) async throws -> [MusicRecommendation] {
-        let snapshot = try await db.collection("recommendations")
-            .whereField("receiverId", isEqualTo: userId)
-            .order(by: "sentAt", descending: true)
-            .getDocuments()
-        
-        return snapshot.documents.compactMap { doc in
-            try? doc.data(as: MusicRecommendation.self)
-        }
+    /// Get recommendations sent TO a user (inbox), optionally limited to a sentAt window
+    func getReceivedRecommendations(userId: String, sentOnOrAfter: Date? = nil, sentBefore: Date? = nil) async throws -> [MusicRecommendation] {
+        try await fetchRecommendations(field: "receiverId", userId: userId, sentOnOrAfter: sentOnOrAfter, sentBefore: sentBefore)
     }
     
-    /// Get recommendations sent BY a user
-    func getSentRecommendations(userId: String) async throws -> [MusicRecommendation] {
-        let snapshot = try await db.collection("recommendations")
-            .whereField("senderId", isEqualTo: userId)
+    /// Get recommendations sent BY a user, optionally limited to a sentAt window
+    func getSentRecommendations(userId: String, sentOnOrAfter: Date? = nil, sentBefore: Date? = nil) async throws -> [MusicRecommendation] {
+        try await fetchRecommendations(field: "senderId", userId: userId, sentOnOrAfter: sentOnOrAfter, sentBefore: sentBefore)
+    }
+    
+    private func fetchRecommendations(field: String, userId: String, sentOnOrAfter: Date?, sentBefore: Date?) async throws -> [MusicRecommendation] {
+        var query: Query = db.collection("recommendations")
+            .whereField(field, isEqualTo: userId)
+        if let sentOnOrAfter = sentOnOrAfter {
+            query = query.whereField("sentAt", isGreaterThanOrEqualTo: sentOnOrAfter)
+        }
+        if let sentBefore = sentBefore {
+            query = query.whereField("sentAt", isLessThan: sentBefore)
+        }
+        let snapshot = try await query
             .order(by: "sentAt", descending: true)
             .getDocuments()
         
@@ -1436,6 +1440,14 @@ class FirebaseService: ObservableObject {
         try await db.collection("recommendations")
             .document(recommendationId)
             .updateData(updateData)
+    }
+    
+    /// Poke the receiver of a sent recommendation; the server timestamp is validated by firestore.rules
+    /// and triggers the push notification in functions/index.js.
+    func pokeRecommendation(id: String) async throws {
+        try await db.collection("recommendations")
+            .document(id)
+            .updateData(["lastPokedAt": FieldValue.serverTimestamp()])
     }
     
     /// Check if a recommendation exists for this sender/receiver/item combo
