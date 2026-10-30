@@ -878,10 +878,26 @@ struct ProfileView: View {
     @ViewBuilder
     private func ratingsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("recent reviews")
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
+            HStack(alignment: .firstTextBaseline) {
+                Text("recent reviews")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                
+                Spacer()
+                
+                if !authManager.isGuestMode {
+                    Button(action: {
+                        notificationManager.pendingDeepLink = .myRatings
+                    }) {
+                        Text("see all")
+                            .font(.footnote)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
             
             if ratingsManager.ratings.isEmpty && !ratingsManager.isLoading {
                 VStack(spacing: 8) {
