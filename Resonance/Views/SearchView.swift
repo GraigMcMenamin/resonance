@@ -111,6 +111,7 @@ struct SearchView: View {
                 }
             }
         }
+        .navigationViewStyle(.stack)
     }
     
     private func performSearch() {

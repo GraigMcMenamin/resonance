@@ -167,6 +167,7 @@ struct BuddyBoardView: View {
                 handleDeepLink(deepLink)
             }
         }
+        .navigationViewStyle(.stack)
     }
     
     // MARK: - Deep Link Handling

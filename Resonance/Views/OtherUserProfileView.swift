@@ -18,6 +18,7 @@ struct OtherUserProfileView: View {
     @State private var isLoadingBuddyStatus = true
     @State private var isSendingRequest = false
     @State private var fetchedUser: AppUser?
+    @State private var didStartInitialLoad = false
     
     let user: AppUser
     
@@ -31,7 +32,7 @@ struct OtherUserProfileView: View {
             Color.black
                 .ignoresSafeArea()
             
-            if viewModel.isLoading {
+            if viewModel.isLoading && !viewModel.hasLoaded {
                 ProgressView()
                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
             } else {
@@ -142,6 +143,9 @@ struct OtherUserProfileView: View {
         .navigationBarTitleDisplayMode(.inline)
         .solidPurpleTopBar()
         .onAppear {
+            // onAppear re-fires when popping back or resuming; reloading then mutates state under pushed screens
+            guard !didStartInitialLoad else { return }
+            didStartInitialLoad = true
             print("DEBUG OtherUserProfileView: user.id = \(user.id)")
             print("DEBUG OtherUserProfileView: user.firebaseUID = \(user.firebaseUID)")
             print("DEBUG OtherUserProfileView: user.spotifyId = \(user.spotifyId ?? "nil")")
@@ -737,6 +741,8 @@ class OtherUserProfileViewModel: ObservableObject {
     @Published var totalRatingsCount: Int = 0
     @Published var buddies: [Buddy] = []
     @Published var isLoading = false
+    // Once true, reloads must not swap the content for a spinner (that pops pushed screens)
+    @Published var hasLoaded = false
     @Published var errorMessage: String?
     @Published var averageRating: Double?
     @Published var listenListCount: Int = 0
@@ -785,10 +791,12 @@ class OtherUserProfileViewModel: ObservableObject {
             }
             
             isLoading = false
+            hasLoaded = true
         } catch {
             print("Error loading user data: \(error)")
             errorMessage = "Failed to load user profile"
             isLoading = false
+            hasLoaded = true
         }
 
         // Loaded separately since it must not fail the rest of the profile if it errors

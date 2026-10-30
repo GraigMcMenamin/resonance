@@ -48,6 +48,7 @@ struct ProfileView: View {
             NavigationView {
                 profileInnerContent
             }
+            .navigationViewStyle(.stack)
             // Forces the NavigationView (and any pushed views like an artist/album/song detail)
             // back to its root whenever the user taps their own username elsewhere in the app.
             .id(notificationManager.profileResetID)
