@@ -179,9 +179,10 @@ service cloud.firestore {
       // Allow any authenticated user to read recommendations (needed for buddy feed queries)
       // Recommendations aren't sensitive - they're meant to be shared
       allow read: if isAuthenticated();
-      // Can create if you're the sender
+      // Can create if you're the sender and the receiver is your buddy
       allow create: if isAuthenticated() && 
-                      request.resource.data.senderId == request.auth.uid;
+                      request.resource.data.senderId == request.auth.uid &&
+                      exists(/databases/$(database)/documents/users/$(request.auth.uid)/buddies/$(request.resource.data.receiverId));
       // Can update if you're the receiver (to mark as rated) or sender
       allow update: if isAuthenticated() && 
                       (resource.data.receiverId == request.auth.uid || 

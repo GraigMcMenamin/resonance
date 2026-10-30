@@ -25,12 +25,31 @@ struct SendMusicView: View {
     @Environment(\.dismiss) private var dismiss
     
     @State private var selectedBuddies: Set<String> = []
+    @State private var buddySearchText: String = ""
     @State private var message: String = ""
     @State private var isSending = false
     @State private var showSuccess = false
     @State private var errorMessage: String?
     
     private let maxMessageLength = 100
+    private let maxVisibleBuddies = 10
+    
+    private var trimmedBuddySearch: String {
+        buddySearchText
+            .trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+    }
+    
+    /// Most recent buddies by default; matching buddies only when searching.
+    private var displayedBuddies: [Buddy] {
+        let query = trimmedBuddySearch
+        if query.isEmpty {
+            return Array(buddyManager.buddies.prefix(maxVisibleBuddies))
+        }
+        return buddyManager.buddies.filter {
+            ($0.username ?? "").localizedCaseInsensitiveContains(query)
+        }
+    }
     
     var body: some View {
         NavigationView {
@@ -54,6 +73,7 @@ struct SendMusicView: View {
                     }
                     .padding()
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("send to buddies")
             .navigationBarTitleDisplayMode(.inline)
@@ -163,20 +183,55 @@ struct SendMusicView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 24)
             } else {
-                LazyVStack(spacing: 8) {
-                    ForEach(buddyManager.buddies) { buddy in
-                        BuddySelectRow(
-                            buddy: buddy,
-                            isSelected: selectedBuddies.contains(buddy.id),
-                            onSelect: {
-                                if selectedBuddies.contains(buddy.id) {
-                                    selectedBuddies.remove(buddy.id)
-                                } else {
-                                    selectedBuddies.insert(buddy.id)
-                                }
-                            }
-                        )
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.white.opacity(0.5))
+                    TextField("search your buddies", text: $buddySearchText)
+                        .textFieldStyle(.plain)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .foregroundColor(.white)
+                    if !buddySearchText.isEmpty {
+                        Button {
+                            buddySearchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.white.opacity(0.5))
+                        }
                     }
+                }
+                .padding(10)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(8)
+                
+                if displayedBuddies.isEmpty {
+                    Text("No buddies match \"\(trimmedBuddySearch)\"")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.6))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                } else {
+                    LazyVStack(spacing: 4) {
+                        ForEach(displayedBuddies) { buddy in
+                            BuddySelectRow(
+                                buddy: buddy,
+                                isSelected: selectedBuddies.contains(buddy.id),
+                                onSelect: {
+                                    if selectedBuddies.contains(buddy.id) {
+                                        selectedBuddies.remove(buddy.id)
+                                    } else {
+                                        selectedBuddies.insert(buddy.id)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                if trimmedBuddySearch.isEmpty && buddyManager.buddies.count > maxVisibleBuddies {
+                    Text("showing your \(maxVisibleBuddies) most recent buddies, search to find others")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.4))
                 }
             }
         }
@@ -303,6 +358,8 @@ struct BuddySelectRow: View {
     let isSelected: Bool
     let onSelect: () -> Void
     
+    private let selectedAccent = Color(red: 0.65, green: 0.45, blue: 0.85)
+    
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 12) {
@@ -317,14 +374,15 @@ struct BuddySelectRow: View {
                         Circle()
                             .fill(Color.gray.opacity(0.3))
                     }
-                    .frame(width: 44, height: 44)
+                    .frame(width: 32, height: 32)
                     .clipShape(Circle())
                 } else {
                     Circle()
                         .fill(Color.gray.opacity(0.3))
-                        .frame(width: 44, height: 44)
+                        .frame(width: 32, height: 32)
                         .overlay(
                             Image(systemName: "person.fill")
+                                .font(.caption)
                                 .foregroundColor(.white.opacity(0.5))
                         )
                 }
@@ -347,19 +405,21 @@ struct BuddySelectRow: View {
                 
                 // Selection indicator
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundColor(isSelected ? Color(red: 0.11, green: 0.73, blue: 0.33) : .white.opacity(0.3))
+                    .font(.body)
+                    .foregroundColor(isSelected ? selectedAccent : .white.opacity(0.3))
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(isSelected ? Color.white.opacity(0.1) : Color.clear)
+                    .fill(isSelected ? Color.lighterButtonPurple : Color.clear)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(isSelected ? Color(red: 0.11, green: 0.73, blue: 0.33) : Color.clear, lineWidth: 2)
+                            .stroke(isSelected ? selectedAccent : Color.clear, lineWidth: 2)
                     )
             )
+            // Makes the Spacer and padding tappable, not just the avatar/name/checkmark.
+            .contentShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
     }

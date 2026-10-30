@@ -82,6 +82,7 @@ struct RatingSheet: View {
                         }
                         .padding(.bottom, 20)
                     }
+                    .scrollDismissesKeyboard(.interactively)
                 }
             }
             .navigationTitle(hasExistingRating ? "Edit Rating" : "Rate & Review")
