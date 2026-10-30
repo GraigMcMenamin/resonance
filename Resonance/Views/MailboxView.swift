@@ -504,42 +504,32 @@ struct MailboxView: View {
 
                 Spacer(minLength: 0)
 
-                Button(action: { openInSpotify(recommendation) }) {
-                    Image(systemName: "play.circle.fill")
-                        .font(.largeTitle)
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, Color(red: 0.6, green: 0.4, blue: 0.8))
-                }
-                .buttonStyle(.plain)
-            }
-
-            HStack(spacing: 12) {
-                Spacer()
-
-                Button(action: {
-                    Task {
-                        if await mailboxManager.poke(recommendation) == false {
-                            showPokeError = true
+                VStack(alignment: .trailing, spacing: 0) {
+                    Button(action: {
+                        Task {
+                            if await mailboxManager.poke(recommendation) == false {
+                                showPokeError = true
+                            }
                         }
+                    }) {
+                        Text(recommendation.canPoke ? "Poke" : "Poked")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(recommendation.canPoke ? .white : .white.opacity(0.6))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
+                            .background(recommendation.canPoke ? Color(red: 0.6, green: 0.4, blue: 0.8) : Color.white.opacity(0.1))
+                            .cornerRadius(8)
                     }
-                }) {
-                    Text(recommendation.canPoke ? "Poke" : "Poked")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(recommendation.canPoke ? .white : .white.opacity(0.6))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 6)
-                        .background(recommendation.canPoke ? Color(red: 0.6, green: 0.4, blue: 0.8) : Color.white.opacity(0.1))
-                        .cornerRadius(8)
-                }
-                .disabled(!recommendation.canPoke)
+                    .buttonStyle(.plain)
+                    .disabled(!recommendation.canPoke)
 
-                Spacer()
-            }
-            .overlay(alignment: .trailing) {
-                Text(agoText(since: recommendation.sentAt))
-                    .font(.caption2)
-                    .foregroundColor(.white.opacity(0.4))
+                    Spacer(minLength: 14)
+
+                    Text(agoText(since: recommendation.sentAt))
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.4))
+                }
             }
         }
         .padding(12)
@@ -549,17 +539,18 @@ struct MailboxView: View {
 
     private func sentRecommendationText(_ recommendation: MusicRecommendation) -> String {
         let receiver = recommendation.receiverUsername.map { "@\($0)" } ?? "someone"
-        let typeLabel: String
-        switch recommendation.itemType {
-        case .artist: typeLabel = "artist"
-        case .album: typeLabel = "album"
-        case .track: typeLabel = "song"
-        }
+        // Spotify appends "(feat. X)" to track names; the artist list already covers it.
+        let title = recommendation.itemName.replacingOccurrences(
+            of: #"\s*[\(\[]\s*(feat\.?|ft\.?|featuring)\b[^\)\]]*[\)\]]\s*$"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        let name = title.isEmpty ? recommendation.itemName : title
 
         if recommendation.itemType != .artist, let artistName = recommendation.artistName {
-            return "You sent \(receiver) the \(typeLabel) \"\(recommendation.itemName)\" by \(artistName)"
+            return "You sent \(receiver) \"\(name)\" by \(artistName)"
         }
-        return "You sent \(receiver) the \(typeLabel) \"\(recommendation.itemName)\""
+        return "You sent \(receiver) \"\(name)\""
     }
 
     @ViewBuilder
