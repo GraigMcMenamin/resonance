@@ -36,7 +36,9 @@ struct ReviewsListView: View {
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var buddyManager: BuddyManager
     @EnvironmentObject var notificationManager: NotificationManager
+    @EnvironmentObject var ratingsManager: RatingsManager
     
+    @State private var editItem: RatableItem?
     @State private var reviews: [Review] = []
     @State private var reviewLikeCounts: [String: Int] = [:]
     @State private var isLoading = true
@@ -115,6 +117,7 @@ struct ReviewsListView: View {
                                         onDelete: {
                                             await deleteReview(review)
                                         },
+                                        onEdit: { editItem = ratableItem(for: review) },
                                         onUserTap: handleUserTap
                                     )
                                     .id(review.id)
@@ -165,6 +168,35 @@ struct ReviewsListView: View {
             if newValue == .buddies {
                 Task { await loadBuddyComments() }
             }
+        }
+        .sheet(item: $editItem, onDismiss: {
+            Task { await loadReviews(showSpinner: false) }
+        }) { item in
+            RatingSheet(item: item, ratingsManager: ratingsManager)
+                .environmentObject(authManager)
+                .environmentObject(firebaseService)
+        }
+    }
+    
+    /// Builds the item from the review's own denormalized fields so RatingSheet keeps the saved image/name.
+    private func ratableItem(for review: Review) -> RatableItem {
+        let images = (review.imageURL ?? imageURL?.absoluteString).map { [SpotifyImage(url: $0, height: nil, width: nil)] }
+        let name = review.itemName
+        let artists = [SpotifyArtistSimple(id: "", name: review.artistName ?? "")]
+        switch review.type {
+        case .artist:
+            return .artist(SpotifyArtist(id: review.spotifyId, name: name, images: images, genres: nil, popularity: nil))
+        case .album:
+            return .album(SpotifyAlbum(id: review.spotifyId, name: name, artists: artists, images: images, releaseDate: nil, totalTracks: nil))
+        case .track:
+            return .track(SpotifyTrack(
+                id: review.spotifyId,
+                name: name,
+                artists: artists,
+                album: SpotifyAlbumSimple(id: "", name: "", images: images),
+                durationMs: nil,
+                popularity: nil
+            ))
         }
     }
     
@@ -264,8 +296,8 @@ struct ReviewsListView: View {
         return sortedBuddyReviews + sortedOtherReviews
     }
     
-    private func loadReviews() async {
-        isLoading = true
+    private func loadReviews(showSpinner: Bool = true) async {
+        if showSpinner { isLoading = true }
         errorMessage = nil
         
         do {
@@ -310,6 +342,7 @@ struct ReviewCard: View {
     var buddyCommentsOnly: Bool = false
     var scrollToCommentId: String? = nil
     var onDelete: (() async -> Void)? = nil
+    var onEdit: (() -> Void)? = nil
     var onUserTap: ((String) -> Void)? = nil
     
     @EnvironmentObject var authManager: AuthenticationManager
@@ -439,6 +472,14 @@ struct ReviewCard: View {
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.6))
                         }
+                    }
+                }
+                
+                if isOwnReview, let onEdit {
+                    Button(action: onEdit) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.6))
                     }
                 }
                 
