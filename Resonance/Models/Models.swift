@@ -855,6 +855,7 @@ struct AppNotification: Codable, Identifiable, Equatable {
         case like
         case reply
         case comment
+        case poke
     }
 
     static func == (lhs: AppNotification, rhs: AppNotification) -> Bool {

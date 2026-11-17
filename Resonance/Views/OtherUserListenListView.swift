@@ -73,7 +73,7 @@ struct OtherUserListenListView: View {
             .pickerStyle(.segmented)
 
             HStack {
-                Text("\(displayedItems.count) item\(displayedItems.count == 1 ? "" : "s")")
+                Text(filter.countLabel(displayedItems.count))
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.5))
 

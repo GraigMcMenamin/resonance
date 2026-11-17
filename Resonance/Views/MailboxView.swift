@@ -755,6 +755,7 @@ struct MailboxView: View {
         case .reply: return "arrowshape.turn.up.left.fill"
         case .like: return "heart.fill"
         case .comment: return "bubble.right.fill"
+        case .poke: return "hand.point.right.fill"
         }
     }
 
@@ -764,6 +765,7 @@ struct MailboxView: View {
         case .reply: return Color(red: 0.6, green: 0.4, blue: 0.8)
         case .like: return .red
         case .comment: return Color(red: 0.6, green: 0.4, blue: 0.8)
+        case .poke: return .orange
         }
     }
 
@@ -803,6 +805,13 @@ struct MailboxView: View {
                 return "\(actor) commented on your \(label) of \(itemName)"
             }
             return "\(actor) commented on your \(label)"
+
+        case .poke:
+            let label = notification.itemType == "track" ? "song" : (notification.itemType ?? "music")
+            if let itemName = notification.itemName, !itemName.isEmpty {
+                return "\(actor) poked you to listen to the \(label) \"\(itemName)\""
+            }
+            return "\(actor) poked you to listen to the \(label) they sent"
         }
     }
 

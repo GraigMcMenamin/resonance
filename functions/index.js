@@ -252,7 +252,20 @@ exports.onRecommendationPoked = onDocumentUpdated(
     if (!afterPoke || afterPoke === beforePoke) return;
     if (after.status !== "pending") return;
 
-    const {receiverId, senderUsername, itemName, itemType} = after;
+    const {receiverId, senderId, senderUsername, itemName, itemType} = after;
+
+    // Persisted first so it shows in the receiver's activity even without push tokens
+    await addMailboxNotification(receiverId, {
+      type: "poke",
+      actorId: senderId,
+      actorUsername: senderUsername || "",
+      actorImageURL: after.senderImageURL || "",
+      spotifyId: after.spotifyId || "",
+      itemType: itemType || "",
+      itemName: itemName || "",
+      artistName: after.artistName || "",
+      imageURL: after.imageURL || "",
+    });
 
     try {
       const userDoc = await admin.firestore()

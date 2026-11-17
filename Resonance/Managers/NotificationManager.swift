@@ -177,7 +177,7 @@ class NotificationManager: NSObject, ObservableObject {
         }
         
         switch type {
-        case "recommendation":
+        case "recommendation", "poke":
             handleRecommendationTap(userInfo)
         case "rating", "review":
             handleBuddyRatingTap(userInfo)

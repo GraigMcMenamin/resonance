@@ -116,6 +116,17 @@ class ListenListManager: ObservableObject {
         case all, artists, albums, songs
 
         var label: String { rawValue }
+
+        func countLabel(_ count: Int) -> String {
+            let noun: String
+            switch self {
+            case .all: noun = "item"
+            case .artists: noun = "artist"
+            case .albums: noun = "album"
+            case .songs: noun = "song"
+            }
+            return "\(count) \(noun)\(count == 1 ? "" : "s")"
+        }
     }
 
     enum SortOrder: String, CaseIterable {

@@ -44,7 +44,7 @@ struct ListenListView: View {
                 emptyState
             } else {
                 List {
-                    Section(footer: swipeHintFooter) {
+                    Section {
                         ForEach(displayedItems) { item in
                             ListenListRow(item: item)
                             .listLink { destinationView(for: item) }
@@ -137,11 +137,19 @@ struct ListenListView: View {
             .pickerStyle(.segmented)
 
             HStack {
-                Text("\(displayedItems.count) item\(displayedItems.count == 1 ? "" : "s")")
+                Text(filter.countLabel(displayedItems.count))
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.5))
 
                 Spacer()
+
+                if !displayedItems.isEmpty {
+                    Text("swipe left on music once you've listened")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.4))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
             }
         }
         .padding(.horizontal)
@@ -190,14 +198,6 @@ struct ListenListView: View {
         }
         .multilineTextAlignment(.center)
         .padding(.horizontal, 40)
-    }
-
-    /// Shown below the list rows (as a Section footer) — with few items it lands in view
-    /// naturally; once enough items fill the screen it scrolls out of the immediate view.
-    private var swipeHintFooter: some View {
-        Text("swipe left on music once you've listened")
-            .font(.caption)
-            .foregroundColor(.white.opacity(0.4))
     }
 
     @ViewBuilder
