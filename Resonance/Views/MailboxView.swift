@@ -797,7 +797,7 @@ struct MailboxView: View {
             return "\(actor) liked your \(label)"
 
         case .comment:
-            let label = (notification.hasReviewContent ?? false) ? "review" : "rating"
+            let label = notification.rankingId != nil ? "ranking" : ((notification.hasReviewContent ?? false) ? "review" : "rating")
             if let preview = notification.preview, !preview.isEmpty {
                 return "\(actor) commented on your \(label): \"\(preview)\""
             }
@@ -820,6 +820,7 @@ struct MailboxView: View {
 
         var userInfo: [AnyHashable: Any] = ["type": notification.type.rawValue]
         if let v = notification.ratingId { userInfo["ratingId"] = v }
+        if let v = notification.rankingId { userInfo["rankingId"] = v }
         if let v = notification.commentId { userInfo["commentId"] = v }
         if let v = notification.spotifyId { userInfo["spotifyId"] = v }
         if let v = notification.itemType { userInfo["itemType"] = v }

@@ -18,6 +18,8 @@ enum NotificationDeepLink: Equatable {
     case buddyRatingFeed(scrollToId: String?, scrollToCommentId: String?)
     /// Navigate to ReviewsListView for a specific item, optionally scrolling to a review and/or comment
     case reviewsList(spotifyId: String, itemName: String, artistName: String?, imageURL: String?, itemType: String, scrollToReviewId: String?, scrollToCommentId: String?, reviewLength: String)
+    /// Navigate to a ranking's detail page, optionally scrolling to a comment
+    case rankingDetail(rankingId: String, scrollToCommentId: String?)
     /// Navigate to home page (for recommendation notifications)
     case homePage
     /// Navigate to profile page (for buddy request notifications)
@@ -173,6 +175,12 @@ class NotificationManager: NSObject, ObservableObject {
         
         guard let type = userInfo["type"] as? String else {
             print("Notification missing type")
+            return
+        }
+        
+        // Ranking comments/mentions carry a rankingId instead of a ratingId
+        if let rankingId = userInfo["rankingId"] as? String, !rankingId.isEmpty {
+            pendingDeepLink = .rankingDetail(rankingId: rankingId, scrollToCommentId: userInfo["commentId"] as? String)
             return
         }
         

@@ -490,8 +490,21 @@ struct RankingFeedRow: View {
 
 // MARK: - Ranking Detail View (full ordered list)
 
+/// Black, full-width, separator-less styling for the comment rows on the ranking detail page.
+private struct CommentListRowStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.vertical, 6)
+            .listRowInsets(EdgeInsets())
+            .padding(.horizontal)
+            .listRowBackground(Color.black)
+            .listRowSeparator(.hidden)
+    }
+}
+
 struct RankingDetailView: View {
     let ranking: UserRanking
+    var scrollToCommentId: String? = nil
     
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var rankingsManager: RankingsManager
@@ -512,8 +525,9 @@ struct RankingDetailView: View {
     
     private let maxVisibleComments = 3
     
-    init(ranking: UserRanking) {
+    init(ranking: UserRanking, scrollToCommentId: String? = nil) {
         self.ranking = ranking
+        self.scrollToCommentId = scrollToCommentId
         _currentRanking = State(initialValue: ranking)
     }
     
@@ -522,6 +536,16 @@ struct RankingDetailView: View {
     }
     
     var body: some View {
+        ScrollViewReader { proxy in
+            detailContent
+                .task {
+                    await loadComments()
+                    await scrollToTargetComment(using: proxy)
+                }
+        }
+    }
+    
+    private var detailContent: some View {
         ZStack {
             Color(red: 0.15, green: 0.08, blue: 0.18)
                 .ignoresSafeArea()
@@ -591,65 +615,63 @@ struct RankingDetailView: View {
                 }
                 
                 Section {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if authManager.currentUser != nil {
-                            HStack(spacing: 8) {
-                                TextField("Add a comment...", text: $newCommentText)
-                                    .textFieldStyle(PlainTextFieldStyle())
-                                    .padding(10)
-                                    .background(Color.white.opacity(0.1))
-                                    .cornerRadius(20)
-                                    .foregroundColor(.white)
-                                    .focused($isCommentFieldFocused)
-                                    .onChange(of: newCommentText) { newValue in
-                                        if newValue.count > 150 {
-                                            newCommentText = String(newValue.prefix(150))
-                                        }
-                                    }
-                                
-                                Button(action: submitComment) {
-                                    if isSubmittingComment {
-                                        ProgressView()
-                                            .scaleEffect(0.8)
-                                            .tint(.white)
-                                    } else {
-                                        Image(systemName: "arrow.up.circle.fill")
-                                            .font(.system(size: 28))
-                                            .foregroundColor(newCommentText.isEmpty ? .white.opacity(0.3) : Color(red: 0.4, green: 0.2, blue: 0.6))
+                    if authManager.currentUser != nil {
+                        HStack(spacing: 8) {
+                            TextField("Add a comment...", text: $newCommentText)
+                                .textFieldStyle(PlainTextFieldStyle())
+                                .padding(10)
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(20)
+                                .foregroundColor(.white)
+                                .focused($isCommentFieldFocused)
+                                .onChange(of: newCommentText) { newValue in
+                                    if newValue.count > 150 {
+                                        newCommentText = String(newValue.prefix(150))
                                     }
                                 }
-                                .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmittingComment)
+                            
+                            Button(action: submitComment) {
+                                if isSubmittingComment {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                        .tint(.white)
+                                } else {
+                                    Image(systemName: "arrow.up.circle.fill")
+                                        .font(.system(size: 28))
+                                        .foregroundColor(newCommentText.isEmpty ? .white.opacity(0.3) : Color(red: 0.4, green: 0.2, blue: 0.6))
+                                }
                             }
+                            .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmittingComment)
                         }
-                        
-                        if comments.isEmpty {
-                            Text("no comments yet")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        } else {
-                            ForEach(sortedComments) { comment in
-                                CommentRow(
-                                    comment: comment,
-                                    reviewId: currentRanking.id,
-                                    initialLikesCount: commentLikeCounts[comment.id] ?? 0,
-                                    onDelete: {
-                                        await deleteComment(comment)
-                                    },
-                                    onReply: { _ in },
-                                    onUserTap: handleCommentUserTap,
-                                    largerIcons: true,
-                                    collection: "rankings"
-                                )
-                                .environmentObject(authManager)
-                                .environmentObject(firebaseService)
-                            }
+                        .modifier(CommentListRowStyle())
+                    }
+                    
+                    if comments.isEmpty {
+                        Text("no comments yet")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .modifier(CommentListRowStyle())
+                    } else {
+                        // One List row per comment so ScrollViewProxy can target a specific comment
+                        ForEach(sortedComments) { comment in
+                            CommentRow(
+                                comment: comment,
+                                reviewId: currentRanking.id,
+                                initialLikesCount: commentLikeCounts[comment.id] ?? 0,
+                                onDelete: {
+                                    await deleteComment(comment)
+                                },
+                                onReply: { _ in },
+                                onUserTap: handleCommentUserTap,
+                                largerIcons: true,
+                                collection: "rankings"
+                            )
+                            .environmentObject(authManager)
+                            .environmentObject(firebaseService)
+                            .modifier(CommentListRowStyle())
+                            .id(comment.id)
                         }
                     }
-                    .padding(.vertical, 8)
-                    .listRowInsets(EdgeInsets())
-                    .padding(.horizontal)
-                    .listRowBackground(Color.black)
-                    .listRowSeparator(.hidden)
                 }
                 
                 NavigationLink(
@@ -665,9 +687,6 @@ struct RankingDetailView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(Color.black)
-        }
-        .task {
-            await loadComments()
         }
         .navigationTitle("ranking")
         .navigationBarTitleDisplayMode(.inline)
@@ -723,6 +742,17 @@ struct RankingDetailView: View {
     
     private var sortedComments: [ReviewComment] {
         comments.sorted { $0.createdAt > $1.createdAt }
+    }
+    
+    @MainActor
+    private func scrollToTargetComment(using proxy: ScrollViewProxy) async {
+        guard let target = scrollToCommentId,
+              comments.contains(where: { $0.id == target }) else { return }
+        // Give the list a moment to lay out the comment rows before scrolling
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        withAnimation {
+            proxy.scrollTo(target, anchor: .center)
+        }
     }
     
     private func handleCommentUserTap(_ userId: String) {

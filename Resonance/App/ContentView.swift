@@ -205,7 +205,7 @@ struct AuthenticatedView: View {
         case .homePage:
             selectedTab = 2
             notificationManager.pendingDeepLink = nil
-        case .buddyRatingFeed, .reviewsList:
+        case .buddyRatingFeed, .reviewsList, .rankingDetail:
             // Switch to the BuddyBoard tab; BuddyBoardView handles scroll/navigation and clears the link itself
             selectedTab = 0
         case .profilePage:

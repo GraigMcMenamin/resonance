@@ -840,6 +840,7 @@ struct AppNotification: Codable, Identifiable, Equatable {
     let createdAt: Date
     var read: Bool
     let ratingId: String?
+    let rankingId: String?
     let commentId: String?
     let spotifyId: String?
     let itemType: String?

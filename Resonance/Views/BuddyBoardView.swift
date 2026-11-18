@@ -33,6 +33,7 @@ struct BuddyBoardView: View {
     @State private var reviewNavRating: UserRating? = nil
     @State private var musicNavRating: UserRating? = nil
     @State private var rankingNav: UserRanking? = nil
+    @State private var rankingNavScrollCommentId: String? = nil
     @State private var showCreateRanking = false
     
     var body: some View {
@@ -79,11 +80,18 @@ struct BuddyBoardView: View {
                 // Hidden NavigationLink for ranking detail navigation
                 NavigationLink(
                     destination: Group {
-                        if let ranking = rankingNav { RankingDetailView(ranking: ranking) }
+                        if let ranking = rankingNav {
+                            RankingDetailView(ranking: ranking, scrollToCommentId: rankingNavScrollCommentId)
+                        }
                     },
                     isActive: Binding(
                         get: { rankingNav != nil },
-                        set: { if !$0 { rankingNav = nil } }
+                        set: {
+                            if !$0 {
+                                rankingNav = nil
+                                rankingNavScrollCommentId = nil
+                            }
+                        }
                     )
                 ) {
                     EmptyView()
@@ -257,6 +265,22 @@ struct BuddyBoardView: View {
             break
         case .myRatings:
             selectedSection = .myRatings
+        case .rankingDetail(let rankingId, let scrollToCommentId):
+            openRanking(id: rankingId, scrollToCommentId: scrollToCommentId)
+        }
+    }
+    
+    private func openRanking(id rankingId: String, scrollToCommentId: String?) {
+        Task { @MainActor in
+            var ranking = rankingsManager.getRanking(id: rankingId)
+            if ranking == nil {
+                ranking = try? await firebaseService.getRanking(id: rankingId)
+            }
+            guard let ranking = ranking else { return }
+            // Let the tab switch and navigation hierarchy settle before pushing
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            rankingNavScrollCommentId = scrollToCommentId
+            rankingNav = ranking
         }
     }
     
