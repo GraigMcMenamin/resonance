@@ -15,6 +15,8 @@ struct BuddyBoardView: View {
     @EnvironmentObject var buddyManager: BuddyManager
     @EnvironmentObject var notificationManager: NotificationManager
     @State private var selectedFilter: RatingFilter = .all
+    @State private var selectedSort: BoardSortOption = .dateNewest
+    @State private var loadAllFailed = false
     @State private var selectedSection: LibrarySection = .buddyReviews
     @State private var buddyRatings: [UserRating] = []
     @State private var buddyRecommendations: [MusicRecommendation] = []
@@ -116,6 +118,13 @@ struct BuddyBoardView: View {
             }
             .navigationTitle(selectedSection == .myRatings ? "my board" : "buddy board")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if selectedSection == .myRatings {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        BoardSortMenu(selection: $selectedSort, options: BoardSortOption.options(forOtherUser: false))
+                    }
+                }
+            }
             .fullScreenCover(isPresented: $showCreateRanking) {
                 CreateRankingView(rankingsManager: rankingsManager)
             }
@@ -159,7 +168,16 @@ struct BuddyBoardView: View {
             .onChange(of: selectedFilter) { _ in
                 // Clear my ratings scroll anchor when filter changes
                 myRatingsAnchorId = nil
+                loadAllRatingsIfNeeded()
             }
+            .onChange(of: selectedSort) { _ in
+                myRatingsAnchorId = nil
+                loadAllFailed = false
+                loadAllRatingsIfNeeded()
+            }
+            .onChange(of: selectedSection) { _ in loadAllRatingsIfNeeded() }
+            .onChange(of: ratingsManager.hasMoreRatings) { _ in loadAllRatingsIfNeeded() }
+            .onChange(of: ratingsManager.isLoading) { _ in loadAllRatingsIfNeeded() }
             .onAppear {
                 if selectedSection == .buddyReviews && !hasBuddyFeedLoaded {
                     Task {
@@ -328,7 +346,16 @@ struct BuddyBoardView: View {
                         .listRowSeparator(.hidden)
                     }
                     
-                    if myBoardItems.isEmpty {
+                    if myBoardItems.isEmpty && isLoadingAllForSort {
+                        HStack {
+                            Spacer()
+                            ProgressView("loading all ratings...")
+                            Spacer()
+                        }
+                        .padding(.vertical, 60)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    } else if myBoardItems.isEmpty {
                         VStack(spacing: 12) {
                             Image(systemName: "star.slash")
                                 .font(.system(size: 60))
@@ -382,6 +409,7 @@ struct BuddyBoardView: View {
                 }
                 .listStyle(.plain)
                 .refreshable {
+                    loadAllFailed = false
                     if let userId = authManager.currentUser?.id {
                         await ratingsManager.refreshUserRatings(userId: userId)
                     }
@@ -712,12 +740,27 @@ struct BuddyBoardView: View {
         }
     }
     
-    /// Ratings and rankings merged into a single, date-sorted feed so they display
+    /// Ratings and rankings merged into a single feed (ordered by the selected sort) so they display
     /// the same way instead of being grouped into separate sections.
     private var myBoardItems: [BuddyFeedItem] {
-        var items: [BuddyFeedItem] = ratingsForMyBoard.map { .rating($0) }
-        items += rankingsForMyBoard.map { .ranking($0) }
-        return items.sorted { $0.date > $1.date }
+        // Partial lists would give a wrong order, so hold back until every rating is in.
+        if isLoadingAllForSort { return [] }
+        return selectedSort.arrange(ratings: ratingsForMyBoard, rankings: rankingsForMyBoard)
+    }
+    
+    private var isLoadingAllForSort: Bool {
+        selectedSort.needsAllRatings && selectedFilter != .rankings
+            && ratingsManager.hasMoreRatings && !loadAllFailed
+    }
+    
+    private func loadAllRatingsIfNeeded() {
+        guard selectedSection == .myRatings, selectedSort.needsAllRatings, selectedFilter != .rankings,
+              ratingsManager.hasMoreRatings, !ratingsManager.isLoading, !loadAllFailed,
+              let userId = authManager.currentUser?.id else { return }
+        Task {
+            let succeeded = await ratingsManager.loadAllUserRatings(userId: userId)
+            if !succeeded { loadAllFailed = true }
+        }
     }
     
     private func deleteMyBoardItem(_ item: BuddyFeedItem) async {

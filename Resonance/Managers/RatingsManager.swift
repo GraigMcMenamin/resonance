@@ -119,6 +119,31 @@ class RatingsManager: ObservableObject {
         }
     }
     
+    /// Fetches every remaining page (larger pages, published once) so sorts see all of the user's ratings.
+    @discardableResult
+    func loadAllUserRatings(userId: String) async -> Bool {
+        guard hasMoreRatings, !isLoading else { return true }
+        isLoading = true
+        var collected: [UserRating] = []
+        var finished = false
+        do {
+            var more = true
+            while more {
+                let result = try await firebaseService.fetchNextUserRatingsPage(userId: userId, limit: 300)
+                collected.append(contentsOf: result.ratings)
+                more = result.hasMore
+            }
+            finished = true
+        } catch {
+            errorMessage = "Failed to load all ratings: \(error.localizedDescription)"
+        }
+        let existingIds = Set(ratings.map { $0.id })
+        ratings.append(contentsOf: collected.filter { !existingIds.contains($0.id) })
+        if finished { hasMoreRatings = false }
+        isLoading = false
+        return finished
+    }
+    
     /// Force-refreshes by re-fetching from page 1.
     func refreshUserRatings(userId: String) async {
         await loadUserRatings(userId: userId, forceRefresh: true)

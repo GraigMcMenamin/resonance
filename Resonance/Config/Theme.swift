@@ -10,14 +10,14 @@ extension Color {
 }
 
 extension Date {
-    /// Buddy board dates: "today", "Oct 12" within this year, "Oct 12, 2025" before that
+    /// Buddy board dates: "today", "oct 12" within this year, "oct 12, 2025" before that
     var feedDateText: String {
         let calendar = Calendar.current
         if calendar.isDateInToday(self) { return "today" }
         if calendar.isDate(self, equalTo: Date(), toGranularity: .year) {
-            return formatted(.dateTime.month(.abbreviated).day())
+            return formatted(.dateTime.month(.abbreviated).day()).lowercased()
         }
-        return formatted(date: .abbreviated, time: .omitted)
+        return formatted(date: .abbreviated, time: .omitted).lowercased()
     }
 }
 

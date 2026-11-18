@@ -11,8 +11,11 @@ import Combine
 struct OtherUserReviewsView: View {
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var rankingsManager: RankingsManager
+    @EnvironmentObject var authManager: AuthenticationManager
     @StateObject private var viewModel = OtherUserReviewsViewModel()
     @State private var selectedFilter: RatingFilter = .all
+    @State private var selectedSort: BoardSortOption = .dateNewest
+    @State private var loadFailed = false
     @State private var anchorId: String? = nil
     @State private var reviewNavRating: UserRating? = nil
     @State private var musicNavRating: UserRating? = nil
@@ -45,11 +48,36 @@ struct OtherUserReviewsView: View {
         }
     }
     
-    /// Ratings and rankings merged into a single, date-sorted feed so they display the same way.
+    /// Ratings and rankings merged into a single feed (ordered by the selected sort) so they display the same way.
     private var boardItems: [BuddyFeedItem] {
-        var items: [BuddyFeedItem] = filteredRatings.map { .rating($0) }
-        items += filteredRankings.map { .ranking($0) }
-        return items.sorted { $0.date > $1.date }
+        // Partial data would give a wrong order, so hold back until everything the sort needs is in.
+        if isPreparingSort { return [] }
+        return selectedSort.arrange(
+            ratings: filteredRatings,
+            rankings: filteredRankings,
+            ratedByMeIds: viewModel.ratedByMeIds ?? []
+        )
+    }
+
+    private var isPreparingSort: Bool {
+        guard selectedSort.needsAllRatings, selectedFilter != .rankings, !loadFailed, viewModel.didLoad else { return false }
+        return viewModel.hasMore || (selectedSort == .ratedByMe && viewModel.ratedByMeIds == nil)
+    }
+
+    private func loadDataForSort() {
+        guard selectedSort.needsAllRatings, selectedFilter != .rankings, !loadFailed,
+              viewModel.didLoad, !viewModel.isLoading else { return }
+        Task {
+            var succeeded = true
+            if viewModel.hasMore {
+                succeeded = await viewModel.loadAll(firebaseService: firebaseService)
+            }
+            if succeeded, selectedSort == .ratedByMe, viewModel.ratedByMeIds == nil,
+               let myId = authManager.currentUser?.id {
+                succeeded = await viewModel.loadRatedByMe(currentUserId: myId, firebaseService: firebaseService)
+            }
+            if !succeeded { loadFailed = true }
+        }
     }
 
     var body: some View {
@@ -109,6 +137,7 @@ struct OtherUserReviewsView: View {
             .padding()
             .onChange(of: selectedFilter) { _ in
                 anchorId = nil
+                loadDataForSort()
             }
 
             ScrollViewReader { proxy in
@@ -121,15 +150,24 @@ struct OtherUserReviewsView: View {
                         }
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
-                    } else if filteredRatings.isEmpty && filteredRankings.isEmpty {
+                    } else if isPreparingSort {
+                        HStack {
+                            Spacer()
+                            ProgressView("loading all ratings...")
+                            Spacer()
+                        }
+                        .padding(.vertical, 60)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    } else if boardItems.isEmpty {
                         VStack(spacing: 12) {
                             Image(systemName: "star.slash")
                                 .font(.system(size: 60))
                                 .foregroundColor(.gray)
-                            Text(selectedFilter == .rankings ? "no rankings yet" : "no ratings yet")
+                            Text(emptyTitle)
                                 .font(.headline)
                                 .foregroundColor(.secondary)
-                            Text(selectedFilter == .rankings ? "this user hasn't made any rankings yet" : "this user hasn't rated any music yet")
+                            Text(emptySubtitle)
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
@@ -198,10 +236,39 @@ struct OtherUserReviewsView: View {
         }
         .navigationTitle(user.username.map { "@\($0)'s board" } ?? "board")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                BoardSortMenu(selection: $selectedSort, options: BoardSortOption.options(forOtherUser: true))
+            }
+        }
+        .onChange(of: selectedSort) { _ in
+            anchorId = nil
+            loadFailed = false
+            loadDataForSort()
+        }
+        .onChange(of: viewModel.isLoading) { _ in loadDataForSort() }
         .onAppear {
             Task {
                 await viewModel.load(userId: user.id, firebaseService: firebaseService)
             }
+        }
+    }
+
+    private var emptyTitle: String {
+        switch (selectedFilter, selectedSort) {
+        case (.rankings, _): return "no rankings yet"
+        case (_, .writtenReviews): return "no written reviews"
+        case (_, .ratedByMe): return "no shared music"
+        default: return "no ratings yet"
+        }
+    }
+
+    private var emptySubtitle: String {
+        switch (selectedFilter, selectedSort) {
+        case (.rankings, _): return "this user hasn't made any rankings yet"
+        case (_, .writtenReviews): return "this user hasn't written any reviews here"
+        case (_, .ratedByMe): return "you haven't rated any of the same music"
+        default: return "this user hasn't rated any music yet"
         }
     }
 
@@ -267,11 +334,15 @@ class OtherUserReviewsViewModel: ObservableObject {
     @Published var ratings: [UserRating] = []
     @Published var isLoading = false
     @Published var hasMore = false
+    @Published private(set) var didLoad = false
+    /// Spotify IDs from `ratings` that the signed-in user has also rated; nil until looked up.
+    @Published var ratedByMeIds: Set<String>? = nil
 
-    private var didLoad = false
+    private var userId: String?
 
     func load(userId: String, firebaseService: FirebaseService) async {
         guard !didLoad else { return }
+        self.userId = userId
         isLoading = true
         firebaseService.resetUserRatingsPagination(for: userId)
         do {
@@ -298,10 +369,48 @@ class OtherUserReviewsViewModel: ObservableObject {
         isLoading = false
     }
 
+    /// Pulls every remaining page in large chunks, publishing once at the end.
+    func loadAll(firebaseService: FirebaseService) async -> Bool {
+        guard hasMore, !isLoading, let userId = userId else { return true }
+        isLoading = true
+        var collected: [UserRating] = []
+        var finished = false
+        do {
+            var more = true
+            while more {
+                let result = try await firebaseService.fetchNextUserRatingsPage(userId: userId, limit: 300)
+                collected.append(contentsOf: result.ratings)
+                more = result.hasMore
+            }
+            finished = true
+        } catch {
+            print("OtherUserReviewsViewModel: error loading all ratings: \(error)")
+        }
+        let existingIds = Set(ratings.map { $0.id })
+        ratings.append(contentsOf: collected.filter { !existingIds.contains($0.id) })
+        if finished { hasMore = false }
+        isLoading = false
+        return finished
+    }
+
+    func loadRatedByMe(currentUserId: String, firebaseService: FirebaseService) async -> Bool {
+        do {
+            ratedByMeIds = try await firebaseService.fetchRatedSpotifyIds(
+                userId: currentUserId,
+                among: Array(Set(ratings.map { $0.spotifyId }))
+            )
+            return true
+        } catch {
+            print("OtherUserReviewsViewModel: error loading shared ratings: \(error)")
+            return false
+        }
+    }
+
     func refresh(userId: String, firebaseService: FirebaseService) async {
         didLoad = false
         ratings = []
         hasMore = false
+        ratedByMeIds = nil
         await load(userId: userId, firebaseService: firebaseService)
     }
 }

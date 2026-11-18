@@ -321,7 +321,26 @@ class FirebaseService: ObservableObject {
             lastDocuments[cursorKey] = last
         }
 
-        return (ratings, ratings.count == limit)
+        // Use the raw doc count so an undecodable doc can't end paging early.
+        return (ratings, snapshot.documents.count == limit)
+    }
+
+    /// Of the given Spotify IDs, returns the ones `userId` has rated. Looks up rating doc IDs directly, so reads scale with matches only.
+    func fetchRatedSpotifyIds(userId: String, among spotifyIds: [String]) async throws -> Set<String> {
+        let docIdToSpotifyId = Dictionary(
+            spotifyIds.map { (UserRating.makeId(userId: userId, spotifyId: $0), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var found = Set<String>()
+        for chunk in Array(docIdToSpotifyId.keys).chunked(into: 30) {
+            let snapshot = try await db.collection("ratings")
+                .whereField(FieldPath.documentID(), in: chunk)
+                .getDocuments()
+            for doc in snapshot.documents {
+                if let spotifyId = docIdToSpotifyId[doc.documentID] { found.insert(spotifyId) }
+            }
+        }
+        return found
     }
 
     /// Fetches ratings for a specific item (spotifyId) only from the given list of users.
