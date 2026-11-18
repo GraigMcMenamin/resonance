@@ -14,6 +14,7 @@ struct ArtistDetailView: View {
     
     @EnvironmentObject var spotifyService: SpotifyService
     @EnvironmentObject var ratingsManager: RatingsManager
+    @EnvironmentObject var rankingsManager: RankingsManager
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var firebaseService: FirebaseService
     @EnvironmentObject var buddyManager: BuddyManager
@@ -34,6 +35,7 @@ struct ArtistDetailView: View {
     @State private var trackAverageRatings: [String: Double] = [:]
     @State private var albumAverageRatings: [String: Double] = [:]
     @State private var showAddToListenListSheet = false
+    @State private var showRankAllAlbumsSheet = false
     
     var body: some View {
         ZStack {
@@ -100,6 +102,13 @@ struct ArtistDetailView: View {
             .environmentObject(firebaseService)
             .environmentObject(authManager)
             .environmentObject(buddyManager)
+        }
+        .fullScreenCover(isPresented: $showRankAllAlbumsSheet) {
+            CreateRankingView(
+                rankingsManager: rankingsManager,
+                presetArtistId: artistId,
+                presetArtistName: artist?.name ?? artistName
+            )
         }
         .sheet(isPresented: $showAddToListenListSheet) {
             AddToListenListSheet(
@@ -262,15 +271,29 @@ struct ArtistDetailView: View {
                 .disabled(artist == nil)
             }
             
-            // Add To Listen List Button
-            Button(action: { showAddToListenListSheet = true }) {
-                HStack(spacing: 4) {
-                    Image(systemName: listenListManager.contains(spotifyId: artistId) ? "checkmark.circle" : "plus.circle")
-                    Text(listenListManager.contains(spotifyId: artistId) ? "on listen list" : "add to listen list")
-                        .lineLimit(1)
+            // Add To Listen List / Rank All Albums Buttons
+            HStack(spacing: 28) {
+                Button(action: { showAddToListenListSheet = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: listenListManager.contains(spotifyId: artistId) ? "checkmark.circle" : "plus.circle")
+                        Text(listenListManager.contains(spotifyId: artistId) ? "on listen list" : "add to listen list")
+                            .lineLimit(1)
+                    }
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.8))
                 }
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.8))
+                
+                if !authManager.isGuestMode && !albums.isEmpty {
+                    Button(action: { showRankAllAlbumsSheet = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "list.number")
+                            Text("Rank All Albums")
+                                .lineLimit(1)
+                        }
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                    }
+                }
             }
             
             // Buddy Ratings Section

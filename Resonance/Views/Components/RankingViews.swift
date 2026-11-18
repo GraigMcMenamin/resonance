@@ -880,6 +880,9 @@ struct CreateRankingView: View {
     /// "rank all songs" entry point on AlbumDetailView).
     var presetAlbumId: String? = nil
     var presetAlbumName: String? = nil
+    /// When set, the ranking is auto-populated with this artist's albums on open (ArtistDetailView's "rank all albums").
+    var presetArtistId: String? = nil
+    var presetArtistName: String? = nil
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var spotifyService: SpotifyService
     @Environment(\.dismiss) var dismiss
@@ -912,12 +915,16 @@ struct CreateRankingView: View {
         presetItems: [RankingEntry] = [],
         presetName: String? = nil,
         presetAlbumId: String? = nil,
-        presetAlbumName: String? = nil
+        presetAlbumName: String? = nil,
+        presetArtistId: String? = nil,
+        presetArtistName: String? = nil
     ) {
         self.rankingsManager = rankingsManager
         self.existingRanking = existingRanking
         self.presetAlbumId = presetAlbumId
         self.presetAlbumName = presetAlbumName
+        self.presetArtistId = presetArtistId
+        self.presetArtistName = presetArtistName
         _name = State(initialValue: existingRanking?.name ?? presetName ?? "")
         _description = State(initialValue: existingRanking?.description ?? "")
         _type = State(initialValue: existingRanking?.type ?? presetType ?? .track)
@@ -1064,6 +1071,8 @@ struct CreateRankingView: View {
             .task {
                 if let albumId = presetAlbumId, items.isEmpty {
                     await populateAlbumTracks(albumId: albumId, albumName: presetAlbumName ?? "")
+                } else if let artistId = presetArtistId, items.isEmpty {
+                    await populateArtistAlbums(artistId: artistId, artistName: presetArtistName ?? "")
                 }
             }
         }
@@ -1093,7 +1102,7 @@ struct CreateRankingView: View {
         errorMessage = nil
         do {
             let albums = try await spotifyService.getArtistAlbums(id: artistId, limit: 50)
-            let fullLengthAlbums = albums.filter { ($0.totalTracks ?? 0) >= 5 }
+            let fullLengthAlbums = Self.removeAlbumVariants(albums.filter { ($0.totalTracks ?? 0) >= 5 })
             type = .album
             items = fullLengthAlbums.map { album in
                 RankingEntry(spotifyId: album.id, name: album.name, artistName: album.artistNames, imageURL: album.imageURL?.absoluteString)
@@ -1105,6 +1114,28 @@ struct CreateRankingView: View {
             errorMessage = "Failed to load artist albums: \(error.localizedDescription)"
         }
         isPopulating = false
+    }
+    
+    /// Drops duplicate names and editions (deluxe, instrumental, "+", etc.) of another album in the list, keeping the shorter-named original.
+    private static func removeAlbumVariants(_ albums: [SpotifyAlbum]) -> [SpotifyAlbum] {
+        let variantKeywords = ["deluxe", "instrumental", "edition", "version", "remaster", "expanded", "anniversary", "bonus", "extended", "complete", "acoustic", "live", "explicit", "clean", "karaoke"]
+        let names = albums.map { $0.name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) }
+        var seen = Set<String>()
+        
+        return albums.enumerated().compactMap { index, album in
+            let name = names[index]
+            guard seen.insert(name).inserted else { return nil }
+            
+            let isVariant = names.contains { base in
+                guard !base.isEmpty, base != name, name.hasPrefix(base) else { return false }
+                let rest = name.dropFirst(base.count)
+                guard let boundary = rest.first, !boundary.isLetter, !boundary.isNumber else { return false }
+                let suffix = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let first = suffix.first else { return false }
+                return "+([".contains(first) || variantKeywords.contains { suffix.contains($0) }
+            }
+            return isVariant ? nil : album
+        }
     }
     
     private func save() async {
